@@ -44,6 +44,11 @@ you are casting or channelling, or both.
 target health, your health, your power, a combat warning, map coordinates, frame rate, latency and
 the clock.
 
+**Keeping up.** The game puts its own cursor where the mouse is right now, while anything an addon
+draws is positioned during the frame and only reaches the screen on the next one, so it trails
+behind while you move. "Keep up with the cursor" pushes the drawn art forward along the direction of
+travel by about one frame of movement to close that gap. It is on by default.
+
 **When to show.** Any of it can be limited to combat, hidden while you hold a mouse button to turn
 the camera, and faded out when the mouse stops moving. There is a shared size, opacity and draw
 layer for everything.

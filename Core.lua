@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.2.0"
+ns.version = "1.3.0"
 ns.report = {}
 
 local report = ns.report
@@ -33,6 +33,9 @@ ns.defaults = {
 	cursorSize = -1, -- -1 auto, 0 = 32px, 1 = 48px, 2 = 64px
 
 	-- Shared look and behaviour of everything we draw
+	-- `lead` pushes the drawn art forward along the direction of travel to cancel the frame of
+	-- delay between positioning it and the screen showing it. 100 is one frame's worth.
+	lead = 100,
 	scale = 1.0,
 	alpha = 1.0,
 	strata = "TOOLTIP",

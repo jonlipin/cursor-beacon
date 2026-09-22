@@ -13,8 +13,9 @@ ns.Effects = Effects
 
 local MAX_TRAIL = 20
 local GCD_SPELL = 61304 -- the hidden global cooldown spell
+local LEAD_CAP = 90 -- most pixels of lead allowed in one frame, so a warp does not fling the art
 
-local overlay, driver, ring, dot, activity, pointer, pointerShadow
+local overlay, anchor, driver, ring, dot, activity, pointer, pointerShadow
 local trail = {}
 local lastX, lastY = 0, 0
 local idleFor, hoverCheck, gcdCheck = 0, 0, 0
@@ -38,6 +39,22 @@ end
 local function PlaceAt(region, x, y)
 	region:ClearAllPoints()
 	region:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+end
+
+-- Setting a size or an alpha that is already set still dirties the layout, and at sixty frames a
+-- second that adds up. These only touch the widget when the value really changed.
+local function SizeIfChanged(region, size)
+	if region.cbSize ~= size then
+		region.cbSize = size
+		region:SetSize(size, size)
+	end
+end
+
+local function AlphaIfChanged(region, value)
+	if region.cbAlpha ~= value then
+		region.cbAlpha = value
+		region:SetAlpha(value)
+	end
 end
 
 local function InCombat()
@@ -87,28 +104,41 @@ function Effects.Init()
 		trail[i] = { tex = tex, x = 0, y = 0 }
 	end
 
-	ring = overlay:CreateTexture(nil, "ARTWORK")
+	-- Everything that sits ON the cursor rides this one small frame. Moving a single frame once
+	-- a frame is a lot less work than re-anchoring five separate textures, and it keeps them
+	-- locked to each other instead of drifting apart on a busy frame.
+	anchor = CreateFrame("Frame", "CursorBeaconAnchor", overlay)
+	anchor:SetSize(1, 1)
+	anchor:EnableMouse(false)
+	if anchor.SetMouseClickEnabled then pcall(anchor.SetMouseClickEnabled, anchor, false) end
+	anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", 0, 0)
+
+	ring = anchor:CreateTexture(nil, "ARTWORK")
 	ring:SetBlendMode("ADD")
+	ring:SetPoint("CENTER", anchor, "CENTER", 0, 0)
 	ring:Hide()
 
-	dot = overlay:CreateTexture(nil, "OVERLAY")
+	dot = anchor:CreateTexture(nil, "OVERLAY")
+	dot:SetPoint("CENTER", anchor, "CENTER", 0, 0)
 	dot:Hide()
 
 	-- The drawn pointer goes above everything else we draw, with its shadow one sublevel down.
-	pointerShadow = overlay:CreateTexture(nil, "OVERLAY", nil, 3)
+	-- Their anchor point depends on the shape, so Apply sets it.
+	pointerShadow = anchor:CreateTexture(nil, "OVERLAY", nil, 3)
 	pointerShadow:SetVertexColor(0, 0, 0)
 	pointerShadow:Hide()
 
-	pointer = overlay:CreateTexture(nil, "OVERLAY", nil, 4)
+	pointer = anchor:CreateTexture(nil, "OVERLAY", nil, 4)
 	pointer:Hide()
 
 	report["SetRotation"] = (ring.SetRotation and pcall(ring.SetRotation, ring, 0)) and "ok" or "unavailable"
 	report["SetCursor"] = SetCursor and "present" or "unavailable, the real cursor cannot be hidden"
 
 	-- The activity swipe rides on a Cooldown frame, which is the same widget the action bars use.
-	local ok, cd = pcall(CreateFrame, "Cooldown", "CursorBeaconActivity", overlay, "CooldownFrameTemplate")
+	local ok, cd = pcall(CreateFrame, "Cooldown", "CursorBeaconActivity", anchor, "CooldownFrameTemplate")
 	if ok and cd then
 		activity = cd
+		activity:SetPoint("CENTER", anchor, "CENTER", 0, 0)
 		activity:SetHideCountdownNumbers(true)
 		if activity.SetDrawEdge then pcall(activity.SetDrawEdge, activity, true) end
 		if activity.SetDrawBling then pcall(activity.SetDrawBling, activity, false) end
@@ -160,13 +190,15 @@ function Effects.Apply()
 	local ok = pcall(overlay.SetFrameStrata, overlay, db.strata)
 	if not ok then overlay:SetFrameStrata("TOOLTIP") end
 	overlay:SetFrameLevel(200)
+	anchor:SetFrameLevel(210)
 
 	local s = db.scale or 1
 
 	-- Ring
 	local r = db.ring
 	ring:SetTexture(r.texture)
-	ring:SetSize(r.size * s, r.size * s)
+	ring.cbSize = r.size * s
+	ring:SetSize(ring.cbSize, ring.cbSize)
 	ring:SetVertexColor(r.color[1], r.color[2], r.color[3])
 	ring:SetShown(db.enabled and r.enabled)
 
@@ -180,12 +212,17 @@ function Effects.Apply()
 	-- Drawn pointer. Its size is an absolute pixel size rather than a multiple of the overall
 	-- scale, because the whole point of it is to pick an exact size.
 	local p = db.pointer
+	local point = ns.PointerAnchor(p.texture)
 	pointer:SetTexture(p.texture)
 	pointer:SetSize(p.size, p.size)
 	pointer:SetVertexColor(p.color[1], p.color[2], p.color[3])
+	pointer:ClearAllPoints()
+	pointer:SetPoint(point, anchor, "CENTER", p.offsetX, p.offsetY)
 	pointer:SetShown(db.enabled and p.enabled)
 	pointerShadow:SetTexture(p.texture)
 	pointerShadow:SetSize(p.size, p.size)
+	pointerShadow:ClearAllPoints()
+	pointerShadow:SetPoint(point, anchor, "CENTER", p.offsetX + 2, p.offsetY - 2)
 	pointerShadow:SetShown(db.enabled and p.enabled and p.shadow)
 
 	-- Trail
@@ -361,10 +398,23 @@ function Effects.OnUpdate(_, elapsed)
 	if not db then return end
 
 	local x, y = CursorXY()
-	local moved = (math.abs(x - lastX) > 0.5) or (math.abs(y - lastY) > 0.5)
+	local dx, dy = x - lastX, y - lastY
+	local moved = (math.abs(dx) > 0.5) or (math.abs(dy) > 0.5)
 	lastX, lastY = x, y
 
-	if ns.Info and ns.Info.Tick then ns.Info.Tick(elapsed, x, y) end
+	-- The game puts its own cursor where the mouse is right now, while anything we draw is
+	-- positioned here and only reaches the screen on the next frame, so the drawn art trails the
+	-- real pointer while the mouse is moving. Pushing it forward along the direction of travel by
+	-- roughly one frame of movement closes that gap. The cap stops a warp across the screen from
+	-- flinging the art off into the distance.
+	local lead = (db.lead or 0) / 100
+	local lx, ly = x, y
+	if lead > 0 then
+		lx = x + math.max(-LEAD_CAP, math.min(LEAD_CAP, dx * lead))
+		ly = y + math.max(-LEAD_CAP, math.min(LEAD_CAP, dy * lead))
+	end
+
+	if ns.Info and ns.Info.Tick then ns.Info.Tick(elapsed, lx, ly) end
 
 	if not ShouldDraw() then
 		UpdateCursorHiding(elapsed, false)
@@ -393,12 +443,15 @@ function Effects.OnUpdate(_, elapsed)
 		hovering = db.ring.hoverGrow and OverSomething() or false
 	end
 
+	-- One move for the ring, the dot, the pointer, its shadow and the activity swipe: they are all
+	-- anchored to this frame, so nothing else here has to be re-anchored.
+	anchor:ClearAllPoints()
+	anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", lx, ly)
+
 	-- Ring
 	if ring:IsShown() then
-		local size = db.ring.size * (db.scale or 1) * (hovering and db.ring.hoverScale or 1)
-		ring:SetSize(size, size)
-		ring:SetAlpha(db.ring.alpha * master)
-		PlaceAt(ring, x, y)
+		SizeIfChanged(ring, db.ring.size * (db.scale or 1) * (hovering and db.ring.hoverScale or 1))
+		AlphaIfChanged(ring, db.ring.alpha * master)
 		if db.ring.spin ~= 0 and ring.SetRotation then
 			spin = spin + elapsed * db.ring.spin
 			pcall(ring.SetRotation, ring, spin)
@@ -407,23 +460,14 @@ function Effects.OnUpdate(_, elapsed)
 
 	-- Dot
 	if dot:IsShown() then
-		dot:SetAlpha(db.dot.alpha * master)
-		PlaceAt(dot, x, y)
+		AlphaIfChanged(dot, db.dot.alpha * master)
 	end
 
-	-- Drawn pointer. The anchor puts the art's own hotspot on the real cursor position, so an
-	-- arrow lines its tip up rather than sitting centred on it.
+	-- Drawn pointer. Its anchor point and offsets were set by Apply, so there is nothing to place.
 	if pointer:IsShown() then
-		local p = db.pointer
-		local anchor = ns.PointerAnchor(p.texture)
-		local px, py = x + p.offsetX, y + p.offsetY
-		pointer:SetAlpha(p.alpha * master)
-		pointer:ClearAllPoints()
-		pointer:SetPoint(anchor, UIParent, "BOTTOMLEFT", px, py)
+		AlphaIfChanged(pointer, db.pointer.alpha * master)
 		if pointerShadow:IsShown() then
-			pointerShadow:SetAlpha(p.alpha * master * 0.6)
-			pointerShadow:ClearAllPoints()
-			pointerShadow:SetPoint(anchor, UIParent, "BOTTOMLEFT", px + 2, py - 2)
+			AlphaIfChanged(pointerShadow, db.pointer.alpha * master * 0.6)
 		end
 	end
 
@@ -433,13 +477,13 @@ function Effects.OnUpdate(_, elapsed)
 	-- frame time so the shape looks the same at 30 and at 144 frames a second.
 	if db.trail.enabled then
 		local follow = 1 - (1 - db.trail.spacing) ^ math.min(elapsed * 60, 10)
-		local px, py = x, y
+		local px, py = lx, ly
 		local count = math.min(db.trail.count, MAX_TRAIL)
 		for i = 1, count do
 			local seg = trail[i]
 			seg.x = seg.x + (px - seg.x) * follow
 			seg.y = seg.y + (py - seg.y) * follow
-			seg.tex:SetAlpha((seg.baseAlpha or db.trail.alpha) * master)
+			AlphaIfChanged(seg.tex, (seg.baseAlpha or db.trail.alpha) * master)
 			PlaceAt(seg.tex, seg.x, seg.y)
 			px, py = seg.x, seg.y
 		end
@@ -457,15 +501,12 @@ function Effects.OnUpdate(_, elapsed)
 					if activity.SetReverse then pcall(activity.SetReverse, activity, not channel) end
 					activity:SetCooldown(start, duration)
 				end
-				activity:SetAlpha(master)
-				PlaceAt(activity, x, y)
+				AlphaIfChanged(activity, master)
 				if not activity:IsShown() then activity:Show() end
 			else
 				activity.lastStart, activity.lastDuration = nil, nil
 				if activity:IsShown() then activity:Hide() end
 			end
-		elseif activity:IsShown() then
-			PlaceAt(activity, x, y)
 		end
 	end
 end

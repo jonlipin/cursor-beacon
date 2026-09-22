@@ -11,7 +11,7 @@ local ADDON, ns = ...
 
 local report = ns.report
 
-local CONTENT_W, CONTENT_H = 664, 544
+local CONTENT_W, CONTENT_H = 664, 592
 local NAV_W = 150
 local PANE_X = NAV_W + 14
 local PANE_W = CONTENT_W - PANE_X - 14
@@ -419,6 +419,10 @@ local function BuildCursorPage(parent)
 		function() return math.floor((ns.db.alpha or 1) * 100 + 0.5) end,
 		function(v) ns.db.alpha = v / 100 end,
 		function(v) return v .. "%" end)
+	Slider(layout, "Keep up with the cursor", 0, 200, 10,
+		function() return ns.db.lead or 0 end, function(v) ns.db.lead = v end,
+		function(v) return v == 0 and "off" or (v .. "%") end,
+		"The game puts its own cursor where the mouse is right now, while anything an addon draws only reaches the screen on the next frame, so it trails behind while you move. This pushes the drawn art forward along the way you are moving to close the gap. 100 percent cancels one frame; raise it if it still lags, lower it if it overshoots.")
 	Choice(layout, "Draw layer", {
 		{ value = "BACKGROUND", label = "Behind" },
 		{ value = "MEDIUM", label = "Middle" },

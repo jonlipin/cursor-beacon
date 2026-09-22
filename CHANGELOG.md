@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.0
+
+The drawn art keeps up with the cursor.
+
+The game puts its own cursor where the mouse is right now. Anything an addon draws is positioned
+during the frame and only reaches the screen on the next one, so it sits a frame behind and the gap
+opens up the faster you move.
+
+Added:
+
+- "Keep up with the cursor" on the Cursor tab. It pushes the drawn art forward along the direction
+  you are moving by about one frame of travel, which cancels that delay. On at 100 percent by
+  default; raise it if it still trails, lower it if it overshoots, set it to zero for the old
+  behaviour. A cap keeps a warp across the screen from flinging the art off.
+
+Changed:
+
+- The ring, the dot, the pointer, its shadow and the activity sweep now ride one small frame that
+  moves with the cursor, instead of each being re-anchored on its own every frame. The draw loop
+  went from about fourteen layout changes a frame to one plus one per live trail segment, and the
+  pieces can no longer drift apart from each other on a busy frame.
+- Sizes and opacities are only written when they actually change, rather than every frame.
+- The options window is taller so the Cursor tab fits its new control.
+
 ## 1.2.0
 
 Getting the drawn pointer on top of the game's own cursor.
