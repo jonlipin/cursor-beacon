@@ -403,15 +403,15 @@ local function BuildCursorPage(parent)
 			ns.db.cursorSize = value
 			ns.ApplyCursorSize()
 		end, "Sets the game's own cursor size. Auto leaves the setting alone.")
-		Note(layout, "This changes the game's accessibility cursor size (32, 48 or 64 pixels). If it does not take hold at once, it applies on the next login.", nil, 2)
+		Note(layout, "The game's own cursor stops at 64 pixels. For anything larger use the Big pointer tab, which draws a pointer at whatever size you like.", nil, 2)
 	else
-		Note(layout, "This client does not expose the cursor size setting, so the size buttons are hidden. Everything below still works.", nil, 2)
+		Note(layout, "This client does not expose the cursor size setting, so the size buttons are hidden. The Big pointer tab draws its own pointer at any size and works either way.", nil, 2)
 	end
 
 	Header(layout, "All effects")
 	Check(layout, "Enable Cursor Beacon", "Turns every effect and readout off in one go.",
 		function() return ns.db.enabled end, function(v) ns.db.enabled = v end)
-	Slider(layout, "Overall size", 50, 300, 5,
+	Slider(layout, "Overall size", 50, 500, 5,
 		function() return math.floor((ns.db.scale or 1) * 100 + 0.5) end,
 		function(v) ns.db.scale = v / 100 end,
 		function(v) return v .. "%" end, "Scales the ring, dot and trail together.")
@@ -439,6 +439,39 @@ local function BuildCursorPage(parent)
 		function(v) return v .. "s" end, nil, 24)
 end
 
+local function BuildPointerPage(parent)
+	local layout = NewLayout(parent)
+
+	Header(layout, "Drawn pointer")
+	if not ns.hasPointerArt then
+		Note(layout, "This client does not carry the pointer art this feature copies, so it is switched off. Everything else in the addon still works.", nil, 2)
+		return
+	end
+	Note(layout, "Draws a copy of the pointer at any size you like, which is how the cursor gets bigger than the 64 pixel limit on the game's own setting. The real cursor still shows on top, so set the Blizzard size to Large on the Cursor tab to hide it inside the big one.", nil, 4)
+	Check(layout, "Draw a larger pointer", "Adds a scalable pointer under the real one.",
+		function() return ns.db.pointer.enabled end, function(v) ns.db.pointer.enabled = v end)
+	Choice(layout, "Shape", TextureOptions(ns.pointerArt),
+		function() return ns.db.pointer.texture end, function(v) ns.db.pointer.texture = v end, nil, 24)
+	Slider(layout, "Size", 32, 512, 4,
+		function() return ns.db.pointer.size end, function(v) ns.db.pointer.size = v end,
+		function(v) return v .. "px" end, "The game's own cursor is 32, 48 or 64 pixels. This goes to 512.", 24)
+	Slider(layout, "Opacity", 10, 100, 5,
+		function() return math.floor(ns.db.pointer.alpha * 100 + 0.5) end,
+		function(v) ns.db.pointer.alpha = v / 100 end,
+		function(v) return v .. "%" end, nil, 24)
+	Color(layout, "Pointer colour", function() return ns.db.pointer.color end,
+		function(r, g, b) ns.db.pointer.color = { r, g, b } end,
+		"Tints the pointer. White leaves the art as the game drew it.", 24)
+	Check(layout, "Dark outline behind it", "A shadow copy that keeps the pointer readable over bright ground.",
+		function() return ns.db.pointer.shadow end, function(v) ns.db.pointer.shadow = v end, 24)
+	Slider(layout, "Nudge sideways", -40, 40, 1,
+		function() return ns.db.pointer.offsetX end, function(v) ns.db.pointer.offsetX = v end,
+		function(v) return v .. "px" end, "Fine tunes where the drawn tip sits against the real one.", 24)
+	Slider(layout, "Nudge up and down", -40, 40, 1,
+		function() return ns.db.pointer.offsetY end, function(v) ns.db.pointer.offsetY = v end,
+		function(v) return v .. "px" end, nil, 24)
+end
+
 local function BuildRingPage(parent)
 	local layout = NewLayout(parent)
 
@@ -447,7 +480,7 @@ local function BuildRingPage(parent)
 		function() return ns.db.ring.enabled end, function(v) ns.db.ring.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.RING_TEXTURES, "ring")),
 		function() return ns.db.ring.texture end, function(v) ns.db.ring.texture = v end, nil, 24)
-	Slider(layout, "Size", 8, 128, 2,
+	Slider(layout, "Size", 8, 320, 2,
 		function() return ns.db.ring.size end, function(v) ns.db.ring.size = v end,
 		function(v) return v .. "px" end, nil, 24)
 	Slider(layout, "Opacity", 5, 100, 5,
@@ -472,7 +505,7 @@ local function BuildRingPage(parent)
 		function() return ns.db.dot.enabled end, function(v) ns.db.dot.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.DOT_TEXTURES, "dot")),
 		function() return ns.db.dot.texture end, function(v) ns.db.dot.texture = v end, nil, 24)
-	Slider(layout, "Size", 2, 40, 1,
+	Slider(layout, "Size", 2, 120, 1,
 		function() return ns.db.dot.size end, function(v) ns.db.dot.size = v end,
 		function(v) return v .. "px" end, nil, 24)
 	Color(layout, "Dot colour", function() return ns.db.dot.color end,
@@ -488,7 +521,7 @@ local function BuildTrailPage(parent)
 	Slider(layout, "Segments", 1, 20, 1,
 		function() return ns.db.trail.count end, function(v) ns.db.trail.count = v end,
 		nil, "How many pieces follow the cursor.", 24)
-	Slider(layout, "Segment size", 4, 64, 1,
+	Slider(layout, "Segment size", 4, 160, 1,
 		function() return ns.db.trail.size end, function(v) ns.db.trail.size = v end,
 		function(v) return v .. "px" end, nil, 24)
 	Slider(layout, "Tightness", 5, 95, 5,
@@ -515,7 +548,7 @@ local function BuildTrailPage(parent)
 		{ value = "both", label = "Both" },
 	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
 		"Sweeps a wedge around the cursor for the global cooldown, for what you are casting, or for both.")
-	Slider(layout, "Size", 16, 160, 2,
+	Slider(layout, "Size", 16, 400, 2,
 		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
 		function(v) return v .. "px" end, nil, 24)
 	Slider(layout, "Opacity", 5, 100, 5,
@@ -592,6 +625,7 @@ end
 
 local PAGES = {
 	{ key = "cursor", label = "Cursor", build = BuildCursorPage },
+	{ key = "pointer", label = "Big pointer", build = BuildPointerPage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
 	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
 	{ key = "info", label = "Information", build = BuildInfoPage },

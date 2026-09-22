@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.0.0"
+ns.version = "1.1.0"
 ns.report = {}
 
 local report = ns.report
@@ -40,6 +40,19 @@ ns.defaults = {
 	hideWhileMouselooking = true,
 	idleFade = false,
 	idleSeconds = 3,
+
+	-- A drawn copy of the pointer. The Blizzard cursor setting stops at 64 pixels, so this is how
+	-- the cursor gets any bigger than that.
+	pointer = {
+		enabled = false,
+		texture = "Interface\\CURSOR\\Point",
+		size = 96,
+		color = { 1.0, 1.0, 1.0 },
+		alpha = 1.0,
+		shadow = true,
+		offsetX = 0,
+		offsetY = 0,
+	},
 
 	ring = {
 		enabled = true,
@@ -195,6 +208,25 @@ ns.RING_TEXTURES = {
 	{ path = "Interface\\Buttons\\WHITE8X8", label = "Square" },
 }
 
+-- The game's own pointer art. `anchor` is the point on the texture that sits on the exact cursor
+-- position: the arrows carry their tip in the top left corner, the crosshair is centred.
+ns.POINTER_TEXTURES = {
+	{ path = "Interface\\CURSOR\\Point", label = "Arrow", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Cast", label = "Cast", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Interact", label = "Hand", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Attack", label = "Attack", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Item", label = "Grab", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Quest", label = "Quest", anchor = "TOPLEFT" },
+	{ path = "Interface\\CURSOR\\Crosshairs", label = "Crosshair", anchor = "CENTER" },
+}
+
+function ns.PointerAnchor(path)
+	for _, entry in ipairs(ns.POINTER_TEXTURES) do
+		if entry.path == path then return entry.anchor end
+	end
+	return "TOPLEFT"
+end
+
 ns.DOT_TEXTURES = {
 	{ path = "Interface\\COMMON\\Indicator-Gray", label = "Disc" },
 	{ path = "Interface\\Cooldown\\star4", label = "Star" },
@@ -207,8 +239,11 @@ function ns.UsableTextures(list, key)
 	for _, entry in ipairs(list) do
 		if ns.TextureExists(entry.path) then out[#out + 1] = entry end
 	end
-	if #out == 0 then out[1] = { path = "Interface\\Buttons\\WHITE8X8", label = "Square" } end
-	report["textures " .. key] = #out .. "/" .. #list .. " available"
+	-- Counted before the fallback goes in, so the report says 0 rather than 1 when this client
+	-- has none of the art.
+	local found = #out
+	if found == 0 then out[1] = { path = "Interface\\Buttons\\WHITE8X8", label = "Square" } end
+	report["textures " .. key] = found .. "/" .. #list .. " available"
 	return out
 end
 
@@ -246,6 +281,12 @@ local function LoadDB(phase)
 	FillDefaults(CursorBeaconDB, ns.defaults)
 	ns.db = CursorBeaconDB
 
+	-- UsableTextures falls back to a plain square when nothing resolves; the pointer art all
+	-- carries an `anchor`, so its absence means this client has no cursor art to copy.
+	ns.pointerArt = ns.UsableTextures(ns.POINTER_TEXTURES, "pointer")
+	ns.hasPointerArt = ns.pointerArt[1] ~= nil and ns.pointerArt[1].anchor ~= nil
+	if not ns.hasPointerArt then ns.db.pointer.enabled = false end
+	ns.db.pointer.texture = ns.ResolveTexture(ns.db.pointer.texture, ns.pointerArt)
 	ns.db.ring.texture = ns.ResolveTexture(ns.db.ring.texture, ns.UsableTextures(ns.RING_TEXTURES, "ring"))
 	ns.db.dot.texture = ns.ResolveTexture(ns.db.dot.texture, ns.UsableTextures(ns.DOT_TEXTURES, "dot"))
 	ns.db.trail.texture = ns.ResolveTexture(ns.db.trail.texture, ns.UsableTextures(ns.DOT_TEXTURES, "dot"))

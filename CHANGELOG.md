@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.1.0
+
+Larger cursor options.
+
+Added:
+
+- Big pointer tab. Draws a copy of the game's pointer art at any size from 32 to 512 pixels, which
+  is how the cursor gets past the 64 pixel ceiling on the game's own cursor size setting. Choose
+  the shape (arrow, cast, hand, attack, grab, quest or crosshair), the size, the colour tint and
+  the opacity, with an optional dark outline behind it and two nudge sliders for lining the drawn
+  tip up with the real one. Each shape knows where its own hotspot is, so an arrow hangs its tip on
+  the cursor while the crosshair centres on it.
+- The pointer size is an absolute pixel size, so the overall size slider does not drag it around.
+
+Changed:
+
+- Wider size ranges everywhere: overall size now reaches 500 percent (was 300), the ring 320 pixels
+  (was 128), the centre dot 120 (was 40), trail segments 160 (was 64) and the activity sweep 400
+  (was 160).
+- The Cursor tab now says where the game's own 64 pixel limit is and points at the Big pointer tab.
+
+Fixed:
+
+- `/cursor debug` counted its own fallback art, so a client with none of a shape set reported
+  "1 of 7 available" instead of "0 of 7".
+
 ## 1.0.0
 
 First release.

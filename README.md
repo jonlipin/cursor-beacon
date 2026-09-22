@@ -13,6 +13,12 @@ Everything is configured from a Blizzard style options page at
 **Cursor size.** Sets the game's accessibility cursor size (32, 48 or 64 pixels) so the hardware
 pointer itself gets bigger. Leave it on Auto and the addon does not touch the setting at all.
 
+**Big pointer.** The game's own setting stops at 64 pixels. For anything larger, Cursor Beacon can
+draw a copy of the pointer at any size from 32 to 512 pixels, in a choice of the game's own cursor
+shapes, with a colour tint, an optional dark outline and two nudge sliders. Each shape knows where
+its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centres on it. The real
+cursor still draws on top, so set the Blizzard size to Large to tuck it inside the big one.
+
 **Ring.** A coloured ring around the cursor, with a choice of shapes, size, opacity, colour and an
 optional slow spin. It can swell when the cursor is over a unit or a button, which makes clickable
 things obvious at a glance.

@@ -14,7 +14,7 @@ ns.Effects = Effects
 local MAX_TRAIL = 20
 local GCD_SPELL = 61304 -- the hidden global cooldown spell
 
-local overlay, driver, ring, dot, activity
+local overlay, driver, ring, dot, activity, pointer, pointerShadow
 local trail = {}
 local lastX, lastY = 0, 0
 local idleFor, hoverCheck, gcdCheck = 0, 0, 0
@@ -94,6 +94,14 @@ function Effects.Init()
 	dot = overlay:CreateTexture(nil, "OVERLAY")
 	dot:Hide()
 
+	-- The drawn pointer goes above everything else we draw, with its shadow one sublevel down.
+	pointerShadow = overlay:CreateTexture(nil, "OVERLAY", nil, 3)
+	pointerShadow:SetVertexColor(0, 0, 0)
+	pointerShadow:Hide()
+
+	pointer = overlay:CreateTexture(nil, "OVERLAY", nil, 4)
+	pointer:Hide()
+
 	report["SetRotation"] = (ring.SetRotation and pcall(ring.SetRotation, ring, 0)) and "ok" or "unavailable"
 
 	-- The activity swipe rides on a Cooldown frame, which is the same widget the action bars use.
@@ -167,6 +175,17 @@ function Effects.Apply()
 	dot:SetSize(d.size * s, d.size * s)
 	dot:SetVertexColor(d.color[1], d.color[2], d.color[3])
 	dot:SetShown(db.enabled and d.enabled)
+
+	-- Drawn pointer. Its size is an absolute pixel size rather than a multiple of the overall
+	-- scale, because the whole point of it is to pick an exact size.
+	local p = db.pointer
+	pointer:SetTexture(p.texture)
+	pointer:SetSize(p.size, p.size)
+	pointer:SetVertexColor(p.color[1], p.color[2], p.color[3])
+	pointer:SetShown(db.enabled and p.enabled)
+	pointerShadow:SetTexture(p.texture)
+	pointerShadow:SetSize(p.size, p.size)
+	pointerShadow:SetShown(db.enabled and p.enabled and p.shadow)
 
 	-- Trail
 	local t = db.trail
@@ -325,6 +344,22 @@ function Effects.OnUpdate(_, elapsed)
 	if dot:IsShown() then
 		dot:SetAlpha(db.dot.alpha * master)
 		PlaceAt(dot, x, y)
+	end
+
+	-- Drawn pointer. The anchor puts the art's own hotspot on the real cursor position, so an
+	-- arrow lines its tip up rather than sitting centred on it.
+	if pointer:IsShown() then
+		local p = db.pointer
+		local anchor = ns.PointerAnchor(p.texture)
+		local px, py = x + p.offsetX, y + p.offsetY
+		pointer:SetAlpha(p.alpha * master)
+		pointer:ClearAllPoints()
+		pointer:SetPoint(anchor, UIParent, "BOTTOMLEFT", px, py)
+		if pointerShadow:IsShown() then
+			pointerShadow:SetAlpha(p.alpha * master * 0.6)
+			pointerShadow:ClearAllPoints()
+			pointerShadow:SetPoint(anchor, UIParent, "BOTTOMLEFT", px + 2, py - 2)
+		end
 	end
 
 	-- Trail. Each segment eases toward the one in front of it; the smoothing is corrected for
