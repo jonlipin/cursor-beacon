@@ -447,7 +447,7 @@ local function BuildPointerPage(parent)
 		Note(layout, "This client does not carry the pointer art this feature copies, so it is switched off. Everything else in the addon still works.", nil, 2)
 		return
 	end
-	Note(layout, "Draws a copy of the pointer at any size you like, which is how the cursor gets bigger than the 64 pixel limit on the game's own setting. The real cursor still shows on top, so set the Blizzard size to Large on the Cursor tab to hide it inside the big one.", nil, 4)
+	Note(layout, "Draws a copy of the pointer at any size you like, which is how the cursor gets bigger than the 64 pixel limit on the game's own setting. The game always draws its real cursor on top of this; the Hide cursor tab is the only way around that.", nil, 4)
 	Check(layout, "Draw a larger pointer", "Adds a scalable pointer under the real one.",
 		function() return ns.db.pointer.enabled end, function(v) ns.db.pointer.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.pointerArt),
@@ -470,6 +470,34 @@ local function BuildPointerPage(parent)
 	Slider(layout, "Nudge up and down", -40, 40, 1,
 		function() return ns.db.pointer.offsetY end, function(v) ns.db.pointer.offsetY = v end,
 		function(v) return v .. "px" end, nil, 24)
+end
+
+local function BuildHidePage(parent)
+	local layout = NewLayout(parent)
+
+	Header(layout, "Hiding the game's cursor")
+	Note(layout, "Nothing an addon draws can sit above the game's own cursor: it is put on screen after the whole interface, and no draw layer reaches past it. The only lever the game gives an addon is to ask for the cursor art to be dropped entirely, which is what this does.", nil, 4)
+	Check(layout, "Hide the game's own cursor", "Asks the game to drop the cursor art so only the drawn pointer is left.",
+		function() return ns.db.pointer.hideReal end,
+		function(v)
+			ns.db.pointer.hideReal = v
+			-- Hiding the real cursor with nothing drawn in its place would leave nothing at all.
+			if v then ns.db.pointer.enabled = true end
+		end)
+	Note(layout, "Two limits come with it, both from the client rather than from this addon. Out in the open world the game locks the cursor to whatever you are pointing at and ignores the request, so the real cursor still shows there. And anything you pick up rides on the cursor, so hiding pauses while you are carrying an item.", 24, 5)
+
+	Header(layout, "Hardware cursor")
+	if ns.HardwareCursorSupported() then
+		Check(layout, "Turn the hardware cursor off", "The same box as Hardware Cursor in the game's video options.",
+			function() return ns.db.pointer.softwareCursor end,
+			function(v)
+				ns.db.pointer.softwareCursor = v
+				ns.ApplyHardwareCursor(true)
+			end)
+		Note(layout, "With the hardware cursor off the game draws the cursor itself instead of handing it to Windows, which is what lets it be hidden in more places. The cost is a little cursor lag, and it may want a restart to take hold.", 24, 4)
+	else
+		Note(layout, "This client does not expose the hardware cursor setting. If the hiding above does not take, look for a Hardware Cursor box in the game's video options and turn it off by hand.", nil, 3)
+	end
 end
 
 local function BuildRingPage(parent)
@@ -626,6 +654,7 @@ end
 local PAGES = {
 	{ key = "cursor", label = "Cursor", build = BuildCursorPage },
 	{ key = "pointer", label = "Big pointer", build = BuildPointerPage },
+	{ key = "hide", label = "Hide cursor", build = BuildHidePage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
 	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
 	{ key = "info", label = "Information", build = BuildInfoPage },

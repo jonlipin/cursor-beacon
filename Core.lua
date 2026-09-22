@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.1.0"
+ns.version = "1.2.0"
 ns.report = {}
 
 local report = ns.report
@@ -52,6 +52,10 @@ ns.defaults = {
 		shadow = true,
 		offsetX = 0,
 		offsetY = 0,
+		-- The game composites its own cursor above everything an addon can draw, so the only way
+		-- to get the drawn pointer on top is to take the real one away.
+		hideReal = false,
+		softwareCursor = false,
 	},
 
 	ring = {
@@ -184,6 +188,34 @@ end
 function ns.CurrentCursorSize()
 	if not ns.CursorSizeSupported() then return nil end
 	return tonumber(GetCVarSafe(CURSOR_CVAR))
+end
+
+-- ------------------------------------------------------------------
+-- The hardware cursor toggle, which is the "Hardware Cursor" box in the game's video options.
+-- A software cursor is drawn by the game rather than handed to the operating system, which is
+-- what lets SetCursor hide it in more places.
+-- ------------------------------------------------------------------
+
+local GX_CVAR = "gxCursor"
+
+function ns.HardwareCursorSupported()
+	if ns.gxCursorOK == nil then
+		local value = GetCVarSafe(GX_CVAR)
+		ns.gxCursorOK = value ~= nil
+		report["hardware cursor cvar"] = value ~= nil and ("ok (currently " .. tostring(value) .. ")") or "not on this client"
+	end
+	return ns.gxCursorOK
+end
+
+-- Only writes the CVar when the user asked for the software cursor. `force` is passed when they
+-- turn the option off, which is the one time we put the game's own setting back.
+function ns.ApplyHardwareCursor(force)
+	if not ns.db or not ns.HardwareCursorSupported() then return end
+	if ns.db.pointer.softwareCursor then
+		SetCVarSafe(GX_CVAR, "0")
+	elseif force then
+		SetCVarSafe(GX_CVAR, "1")
+	end
 end
 
 -- ------------------------------------------------------------------
@@ -348,11 +380,15 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if CountKeys(CursorBeaconDB) == 0 then LoadDB("player login") end
 		ns.CursorSizeSupported()
 		ns.ApplyCursorSize()
+		ns.HardwareCursorSupported()
+		ns.ApplyHardwareCursor()
 		ns.Refresh()
 		if ns.SyncOptions then pcall(ns.SyncOptions) end
 
 	elseif event == "PLAYER_LOGOUT" then
 		MirrorToAccount()
+		-- Never leave the session with the game's cursor hidden.
+		if ns.Effects and ns.Effects.RestoreCursor then pcall(ns.Effects.RestoreCursor) end
 
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		ns.Refresh()

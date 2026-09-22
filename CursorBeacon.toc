@@ -2,7 +2,7 @@
 ## Title: Cursor Beacon
 ## Notes: Cursor size, tracking effects and an at-cursor readout, with a Blizzard style options page.
 ## Author: jonlipin
-## Version: 1.1.0
+## Version: 1.2.0
 ## SavedVariables: CursorBeaconAccountDB
 ## SavedVariablesPerCharacter: CursorBeaconDB
 ## IconTexture: Interface\Cooldown\ping4

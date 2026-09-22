@@ -16,8 +16,16 @@ pointer itself gets bigger. Leave it on Auto and the addon does not touch the se
 **Big pointer.** The game's own setting stops at 64 pixels. For anything larger, Cursor Beacon can
 draw a copy of the pointer at any size from 32 to 512 pixels, in a choice of the game's own cursor
 shapes, with a colour tint, an optional dark outline and two nudge sliders. Each shape knows where
-its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centres on it. The real
-cursor still draws on top, so set the Blizzard size to Large to tuck it inside the big one.
+its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centres on it.
+
+**Hiding the real cursor.** The game puts its own cursor on screen after the whole interface, and
+no draw layer an addon can reach goes past it, so nothing can be drawn over it. The only lever the
+API gives an addon is to ask for the cursor art to be dropped, and the Hide cursor tab does that.
+Two limits come with it, both from the client: out in the open world the game locks the cursor to
+whatever you are pointing at and ignores the request, so the real cursor still shows there, and
+hiding pauses while you are carrying something so you can see what you picked up. The same tab can
+turn off the hardware cursor (the Hardware Cursor box in the game's video options), which makes the
+game draw the cursor itself and lets it be hidden in more places, at the cost of a little lag.
 
 **Ring.** A coloured ring around the cursor, with a choice of shapes, size, opacity, colour and an
 optional slow spin. It can swell when the cursor is over a unit or a button, which makes clickable

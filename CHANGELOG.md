@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.2.0
+
+Getting the drawn pointer on top of the game's own cursor.
+
+The game puts its cursor on screen after the whole interface, and no draw layer an addon can reach
+goes past it, so there is no way to draw over it. The only lever the API gives an addon is to ask
+for the cursor art to be dropped. That is what this release adds.
+
+Added:
+
+- Hide cursor tab, with a switch that hides the game's own cursor so only the drawn pointer is
+  left. Turning it on turns the drawn pointer on as well, so there is always something to see.
+- A switch for the hardware cursor, the same setting as the Hardware Cursor box in the game's video
+  options. With it off the game draws the cursor itself, which is what lets it be hidden in more
+  places, at the cost of a little cursor lag.
+- Both tabs say plainly where the limits are: out in the open world the game locks the cursor to
+  whatever you are pointing at and ignores the request, so the real cursor still shows there.
+
+Safeguards:
+
+- Hiding pauses while you are carrying something on the cursor, so you can still see what you
+  picked up.
+- The cursor comes back whenever the drawn pointer is not showing, when the option is switched off,
+  and at logout.
+- A client that refuses the request switches the option off rather than leaving you without a
+  cursor, and `/cursor debug` records what happened.
+
 ## 1.1.0
 
 Larger cursor options.

@@ -103,6 +103,7 @@ function Effects.Init()
 	pointer:Hide()
 
 	report["SetRotation"] = (ring.SetRotation and pcall(ring.SetRotation, ring, 0)) and "ok" or "unavailable"
+	report["SetCursor"] = SetCursor and "present" or "unavailable, the real cursor cannot be hidden"
 
 	-- The activity swipe rides on a Cooldown frame, which is the same widget the action bars use.
 	local ok, cd = pcall(CreateFrame, "Cooldown", "CursorBeaconActivity", overlay, "CooldownFrameTemplate")
@@ -218,6 +219,69 @@ function Effects.Apply()
 	if not db.enabled then
 		overlay:Hide()
 	end
+	if not (db.enabled and db.pointer.enabled and db.pointer.hideReal) then
+		Effects.RestoreCursor()
+	end
+end
+
+-- ------------------------------------------------------------------
+-- Hiding the game's own cursor
+--
+-- Nothing an addon draws can sit above the hardware cursor: the game composites it last. The one
+-- lever the API gives us is SetCursor with a path that does not resolve, which hides the cursor
+-- art. Two limits come with it and neither is something this addon can work around:
+--   * over WorldFrame the game locks the cursor to what you are pointing at and ignores us, so
+--     the real cursor stays visible out in the world;
+--   * whatever you pick up rides on the cursor, so hiding pauses while you are carrying something.
+-- ------------------------------------------------------------------
+
+-- Deliberately not a real file. SetCursor hides the cursor when the path does not resolve.
+local HIDE_PATH = "Interface\\AddOns\\CursorBeacon\\NoCursor"
+
+local hideThrottle = 0
+local cursorHidden = false
+
+local function CarryingSomething()
+	if not GetCursorInfo then return false end
+	local ok, kind = pcall(GetCursorInfo)
+	return ok and kind ~= nil
+end
+
+function Effects.RestoreCursor()
+	if not cursorHidden then return end
+	cursorHidden = false
+	ns.cursorHidden = false
+	pcall(SetCursor, nil)
+end
+
+-- `drawing` is whether the effects are visible this frame; there is no sense hiding the real
+-- cursor while our own pointer is hidden too.
+local function UpdateCursorHiding(elapsed, drawing)
+	local db = ns.db
+	local want = drawing and db.enabled and db.pointer.enabled and db.pointer.hideReal
+		and pointer and pointer:IsShown() and not CarryingSomething()
+
+	if not want then
+		Effects.RestoreCursor()
+		return
+	end
+
+	-- The interface sets the cursor itself whenever the mouse moves over something, so this has
+	-- to be put back rather than set once.
+	hideThrottle = hideThrottle + elapsed
+	if hideThrottle > 0.05 or not cursorHidden then
+		hideThrottle = 0
+		local ok = pcall(SetCursor, HIDE_PATH)
+		if report["hide cursor"] == nil then
+			report["hide cursor"] = ok and "ok (no effect over the open world)" or "SetCursor refused it"
+		end
+		if not ok then
+			db.pointer.hideReal = false
+			return
+		end
+	end
+	cursorHidden = true
+	ns.cursorHidden = true
 end
 
 -- ------------------------------------------------------------------
@@ -303,6 +367,7 @@ function Effects.OnUpdate(_, elapsed)
 	if ns.Info and ns.Info.Tick then ns.Info.Tick(elapsed, x, y) end
 
 	if not ShouldDraw() then
+		UpdateCursorHiding(elapsed, false)
 		overlay:Hide()
 		-- Park the trail on the cursor so it does not whip across the screen when it comes back.
 		for i = 1, MAX_TRAIL do trail[i].x, trail[i].y = x, y end
@@ -361,6 +426,8 @@ function Effects.OnUpdate(_, elapsed)
 			pointerShadow:SetPoint(anchor, UIParent, "BOTTOMLEFT", px + 2, py - 2)
 		end
 	end
+
+	UpdateCursorHiding(elapsed, true)
 
 	-- Trail. Each segment eases toward the one in front of it; the smoothing is corrected for
 	-- frame time so the shape looks the same at 30 and at 144 frames a second.
