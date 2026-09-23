@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.4.0"
+ns.version = "1.5.0"
 ns.report = {}
 
 local report = ns.report
@@ -31,6 +31,12 @@ ns.defaults = {
 	-- Blizzard hardware cursor
 	applyCursorSize = false,
 	cursorSize = -1, -- -1 auto, 0 = 32px, 1 = 48px, 2 = 64px
+
+	-- A button on the minimap rim. `angle` is degrees around it, kept when the user drags it.
+	minimap = {
+		shown = true,
+		angle = 215,
+	},
 
 	-- Shared look and behaviour of everything we draw
 	-- `lead` pushes the drawn art forward along the direction of travel to cancel the frame of
@@ -366,6 +372,7 @@ function ns.Refresh()
 	MirrorToAccount()
 	if ns.Effects and ns.Effects.Apply then pcall(ns.Effects.Apply) end
 	if ns.Info and ns.Info.Apply then pcall(ns.Info.Apply) end
+	if ns.UpdateMinimapButton then pcall(ns.UpdateMinimapButton) end
 end
 
 -- ------------------------------------------------------------------
@@ -440,6 +447,7 @@ local function PrintHelp()
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor|r opens the options window")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor on|r or |cffffff00off|r toggles every effect")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor size auto|1|2|3|r sets the Blizzard cursor size")
+	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor minimap|r shows or hides the minimap button")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor test|r runs the activity sweep for a few seconds")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor reset|r restores defaults")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor debug|r prints what resolved on this client")
@@ -456,6 +464,13 @@ SlashCmdList["CURSORBEACON"] = function(msg)
 		if ns.ToggleOptions then ns.ToggleOptions() else Print("Options are not built yet.") end
 	elseif cmd == "debug" then
 		PrintDebug()
+	elseif cmd == "minimap" then
+		local want = ns.db.minimap.shown
+		if rest == "on" then want = true elseif rest == "off" then want = false else want = not want end
+		ns.db.minimap.shown = want
+		ns.Refresh()
+		if ns.SyncOptions then ns.SyncOptions() end
+		Print("minimap button " .. (want and "shown" or "hidden") .. ".")
 	elseif cmd == "test" then
 		if not (ns.Effects and ns.Effects.PreviewActivity) then
 			Print("the activity sweep was not built on this client, see /cursor debug.")

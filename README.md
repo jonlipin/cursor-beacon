@@ -6,7 +6,11 @@ cast, and show a small readout beside the pointer.
 
 Everything is configured from a Blizzard style options page at
 **Esc > Options > AddOns > Cursor Beacon**, or from the same controls in a standalone window with
-`/cursor`.
+`/cursor` or the minimap button.
+
+The minimap button opens the options on a left click, turns every effect on and off on a right
+click, and can be dragged around the rim. Turn it off with "Show a minimap button" on the Cursor
+tab or with `/cursor minimap`.
 
 ## What it does
 
@@ -61,6 +65,7 @@ layer for everything.
 | `/cursor` | Opens the options window |
 | `/cursor on`, `/cursor off` | Toggles every effect |
 | `/cursor size auto\|1\|2\|3` | Sets the Blizzard cursor size |
+| `/cursor minimap` | Shows or hides the minimap button |
 | `/cursor test` | Runs the activity sweep for four seconds |
 | `/cursor reset` | Restores the defaults |
 | `/cursor debug` | Prints what resolved on this client |

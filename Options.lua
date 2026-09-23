@@ -11,7 +11,7 @@ local ADDON, ns = ...
 
 local report = ns.report
 
-local CONTENT_W, CONTENT_H = 664, 592
+local CONTENT_W, CONTENT_H = 664, 624
 local NAV_W = 150
 local PANE_X = NAV_W + 14
 local PANE_W = CONTENT_W - PANE_X - 14
@@ -411,6 +411,8 @@ local function BuildCursorPage(parent)
 	Header(layout, "All effects")
 	Check(layout, "Enable Cursor Beacon", "Turns every effect and readout off in one go.",
 		function() return ns.db.enabled end, function(v) ns.db.enabled = v end)
+	Check(layout, "Show a minimap button", "Left-click it for these options, right-click to turn the effects on and off, drag it around the rim to move it.",
+		function() return ns.db.minimap.shown end, function(v) ns.db.minimap.shown = v end)
 	Slider(layout, "Overall size", 50, 500, 5,
 		function() return math.floor((ns.db.scale or 1) * 100 + 0.5) end,
 		function(v) ns.db.scale = v / 100 end,
@@ -652,6 +654,7 @@ local function BuildAboutPage(parent)
 	Note(layout, "/cursor opens this window.", 12)
 	Note(layout, "/cursor on and /cursor off toggle every effect.", 12)
 	Note(layout, "/cursor size auto, 1, 2 or 3 sets the Blizzard cursor size.", 12)
+	Note(layout, "/cursor minimap shows or hides the minimap button.", 12)
 	Note(layout, "/cursor reset restores the defaults.", 12)
 	Note(layout, "/cursor debug prints what this client supports, which is worth pasting into a bug report.", 12, 2)
 
@@ -802,6 +805,114 @@ function ns.ToggleOptions()
 		window:Show()
 		if window.Raise then window:Raise() end
 	end
+end
+
+-- ------------------------------------------------------------------
+-- Minimap button
+--
+-- Built by hand rather than through LibDBIcon, which this addon does not carry. It sits on the
+-- rim at a saved angle, and dragging it moves it around the rim.
+-- ------------------------------------------------------------------
+
+local minimapButton
+
+-- math.atan2 was dropped in later Lua versions and the game supplies its own atan2, so take
+-- whichever exists.
+local function Atan2(y, x)
+	if atan2 then return atan2(y, x) end
+	if math.atan2 then return math.atan2(y, x) end
+	return math.atan(y, x)
+end
+
+local function PlaceMinimapButton()
+	if not minimapButton then return end
+	local angle = math.rad(ns.db.minimap.angle or 215)
+	local radius = ((Minimap:GetWidth() or 140) / 2) + 6
+	minimapButton:ClearAllPoints()
+	minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+end
+
+local function MinimapIcon()
+	for _, path in ipairs({ "Interface\\CURSOR\\Point", "Interface\\Cooldown\\ping4", "Interface\\Buttons\\WHITE8X8" }) do
+		if ns.TextureExists(path) then return path end
+	end
+	return "Interface\\Buttons\\WHITE8X8"
+end
+
+local function BuildMinimapButton()
+	minimapButton = CreateFrame("Button", "CursorBeaconMinimapButton", Minimap)
+	minimapButton:SetSize(31, 31)
+	minimapButton:SetFrameStrata("MEDIUM")
+	minimapButton:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 8)
+	minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	minimapButton:RegisterForDrag("LeftButton")
+	minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+	local bg = minimapButton:CreateTexture(nil, "BACKGROUND")
+	bg:SetSize(20, 20)
+	bg:SetPoint("TOPLEFT", 7, -5)
+	bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+
+	local icon = minimapButton:CreateTexture(nil, "ARTWORK")
+	icon:SetSize(17, 17)
+	icon:SetPoint("TOPLEFT", 8, -6)
+	icon:SetTexture(MinimapIcon())
+	minimapButton.cbIcon = icon
+
+	local border = minimapButton:CreateTexture(nil, "OVERLAY")
+	border:SetSize(53, 53)
+	border:SetPoint("TOPLEFT")
+	border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+
+	minimapButton:SetScript("OnClick", function(_, button)
+		if button == "RightButton" then
+			ns.db.enabled = not ns.db.enabled
+			ns.Refresh()
+			ns.SyncOptions()
+		else
+			ns.ToggleOptions()
+		end
+	end)
+
+	minimapButton:SetScript("OnDragStart", function(self)
+		self:SetScript("OnUpdate", function()
+			local mx, my = Minimap:GetCenter()
+			local scale = Minimap:GetEffectiveScale()
+			local cx, cy = GetCursorPosition()
+			if not (mx and my and cx and cy and scale and scale ~= 0) then return end
+			ns.db.minimap.angle = math.deg(Atan2(cy / scale - my, cx / scale - mx)) % 360
+			PlaceMinimapButton()
+		end)
+	end)
+	minimapButton:SetScript("OnDragStop", function(self)
+		self:SetScript("OnUpdate", nil)
+		ns.MirrorToAccount()
+	end)
+
+	minimapButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:SetText("Cursor Beacon", 1, 1, 1)
+		GameTooltip:AddLine(ns.db.enabled and "Effects are on" or "Effects are off",
+			ns.db.enabled and 0.4 or 1, ns.db.enabled and 0.85 or 0.4, 0.4)
+		GameTooltip:AddLine("Left-click: options", 0.7, 0.7, 0.7)
+		GameTooltip:AddLine("Right-click: turn the effects on and off", 0.7, 0.7, 0.7)
+		GameTooltip:AddLine("Drag: move around the minimap", 0.7, 0.7, 0.7)
+		GameTooltip:Show()
+	end)
+	minimapButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+function ns.UpdateMinimapButton()
+	if not Minimap or not ns.db then return end
+	if not minimapButton then
+		-- Nothing is built until it is actually wanted, so turning it off costs nothing.
+		if not ns.db.minimap.shown then return end
+		local ok, err = pcall(BuildMinimapButton)
+		report["minimap button"] = ok and "ok" or ("failed: " .. tostring(err))
+		if not ok then return end
+	end
+	minimapButton:SetShown(ns.db.minimap.shown)
+	PlaceMinimapButton()
 end
 
 -- ------------------------------------------------------------------

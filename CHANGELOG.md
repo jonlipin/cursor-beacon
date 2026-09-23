@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+Added:
+
+- A minimap button. Left-click it for the options, right-click to turn every effect on and off,
+  and drag it around the rim to move it. Where you leave it is remembered.
+- "Show a minimap button" on the Cursor tab turns it off, and `/cursor minimap` does the same from
+  chat. With it off the button is never built at all.
+
 ## 1.4.0
 
 Three things that did not work.
