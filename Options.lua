@@ -3,9 +3,14 @@
 -- (Esc > Options > AddOns > Cursor Beacon) or in a standalone window opened with /cursor.
 --
 -- The page is registered as a CANVAS category and holds only our own widgets. It deliberately
--- does not create Settings proxy settings and never calls Settings.OpenToCategory: on this
--- client both of those tainted Blizzard code paths and produced "secret number value" errors in
--- unrelated frames. Registering a canvas category and drawing into it is safe.
+-- does not create Settings proxy settings: on this client those tainted Blizzard code paths and
+-- produced "secret number value" errors in unrelated frames. Registering a canvas category and
+-- drawing into it is safe.
+--
+-- Since 1.6.0 the minimap button and /cursor do call Settings.OpenToCategory, at the user's
+-- request, because they want the game's own options window rather than a separate one. That call
+-- runs Blizzard code inside our execution and is the one remaining taint risk here. If it ever
+-- misbehaves, "/cursor window" goes back to the addon's own window, which touches nothing.
 
 local ADDON, ns = ...
 
@@ -651,7 +656,7 @@ local function BuildAboutPage(parent)
 	Header(layout, "Cursor Beacon " .. ns.version)
 	Note(layout, "Adds a ring, a dot and a trail that follow your cursor, an optional sweep for the global cooldown or your current cast, and a small readout beside the pointer. It can also set the game's own cursor size.", nil, 3)
 	Note(layout, "Chat commands:")
-	Note(layout, "/cursor opens this window.", 12)
+	Note(layout, "/cursor opens these options in the game menu, the same as clicking the minimap button.", 12, 2)
 	Note(layout, "/cursor on and /cursor off toggle every effect.", 12)
 	Note(layout, "/cursor size auto, 1, 2 or 3 sets the Blizzard cursor size.", 12)
 	Note(layout, "/cursor minimap shows or hides the minimap button.", 12)
@@ -718,7 +723,7 @@ local function BuildContent()
 
 	local subtitle = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-	subtitle:SetText("Type /cursor to open this at any time.")
+	subtitle:SetText("Type /cursor or click the minimap button to open this at any time.")
 
 	-- Navigation column
 	local nav = CreateFrame("Frame", nil, content)
@@ -793,12 +798,60 @@ local function BuildWindow()
 	tinsert(UISpecialFrames, "CursorBeaconWindow")
 end
 
-function ns.ToggleOptions()
-	BuildWindow()
-	if page and page:IsShown() then
-		ns.Print("the options are open in the game menu, under Esc > Options > AddOns > Cursor Beacon.")
-		return
+-- Opens the addon's page inside the game's own options window. Returns false when this client
+-- will not do it, in which case the caller falls back to the standalone window.
+--
+-- Note on taint: asking the game to open its Settings panel from addon code runs Blizzard's own
+-- code inside our execution, and on this client that has previously spread taint into unrelated
+-- frames. The page itself is safe, it holds nothing but this addon's own widgets and registers no
+-- proxy settings. Only this one call carries the risk, and it is what the game menu route needs.
+function ns.OpenBlizzardOptions()
+	if not ns.optionsCategory then return false end
+
+	local ok = false
+	if Settings and Settings.OpenToCategory then
+		ok = pcall(Settings.OpenToCategory, ns.optionsCategory)
+		-- Some builds want the category's ID rather than the category itself.
+		if not ok and ns.optionsCategory.GetID then
+			local fine, id = pcall(ns.optionsCategory.GetID, ns.optionsCategory)
+			if fine and id then ok = pcall(Settings.OpenToCategory, id) end
+		end
 	end
+	if not ok and InterfaceOptionsFrame_OpenToCategory and page then
+		-- The older route, which wants two goes at it to land on the right panel.
+		ok = pcall(InterfaceOptionsFrame_OpenToCategory, page)
+		if ok then pcall(InterfaceOptionsFrame_OpenToCategory, page) end
+	end
+
+	report["open options"] = ok and "the game's options window" or "refused, using the addon's own window"
+	return ok and true or false
+end
+
+local function CloseBlizzardOptions()
+	if SettingsPanel then
+		if HideUIPanel and pcall(HideUIPanel, SettingsPanel) then return true end
+		if SettingsPanel.Hide and pcall(SettingsPanel.Hide, SettingsPanel) then return true end
+	end
+	if InterfaceOptionsFrame and HideUIPanel then
+		return (pcall(HideUIPanel, InterfaceOptionsFrame))
+	end
+	return false
+end
+
+-- `forceWindow` is the escape hatch behind "/cursor window", for anyone who would rather not have
+-- the game's options window involved at all.
+function ns.ToggleOptions(forceWindow)
+	BuildWindow()
+
+	if not forceWindow then
+		-- Already open in the game menu, so this click closes it again.
+		if page and page:IsShown() then
+			if CloseBlizzardOptions() then return end
+		end
+		if window:IsShown() then window:Hide() end
+		if ns.OpenBlizzardOptions() then return end
+	end
+
 	if window:IsShown() then
 		window:Hide()
 	else
@@ -904,7 +957,7 @@ local function BuildMinimapButton()
 		GameTooltip:SetText("Cursor Beacon", 1, 1, 1)
 		GameTooltip:AddLine(ns.db.enabled and "Effects are on" or "Effects are off",
 			ns.db.enabled and 0.4 or 1, ns.db.enabled and 0.85 or 0.4, 0.4)
-		GameTooltip:AddLine("Left-click: options", 0.7, 0.7, 0.7)
+		GameTooltip:AddLine("Left-click: options in the game menu", 0.7, 0.7, 0.7)
 		GameTooltip:AddLine("Right-click: turn the effects on and off", 0.7, 0.7, 0.7)
 		GameTooltip:AddLine("Drag: move around the minimap", 0.7, 0.7, 0.7)
 		GameTooltip:Show()

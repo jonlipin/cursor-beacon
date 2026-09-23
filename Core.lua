@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.5.1"
+ns.version = "1.6.0"
 ns.report = {}
 
 local report = ns.report
@@ -444,7 +444,8 @@ end
 
 local function PrintHelp()
 	Print("commands:")
-	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor|r opens the options window")
+	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor|r opens the options in the game menu")
+	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor window|r opens them in a window of their own instead")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor on|r or |cffffff00off|r toggles every effect")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor size auto|1|2|3|r sets the Blizzard cursor size")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor minimap|r shows or hides the minimap button")
@@ -464,6 +465,8 @@ SlashCmdList["CURSORBEACON"] = function(msg)
 		if ns.ToggleOptions then ns.ToggleOptions() else Print("Options are not built yet.") end
 	elseif cmd == "debug" then
 		PrintDebug()
+	elseif cmd == "window" then
+		if ns.ToggleOptions then ns.ToggleOptions(true) end
 	elseif cmd == "minimap" then
 		local want = ns.db.minimap.shown
 		if rest == "on" then want = true elseif rest == "off" then want = false else want = not want end

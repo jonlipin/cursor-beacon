@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0
+
+Changed:
+
+- The minimap button and `/cursor` now open the addon's page inside the game's own options window,
+  at Esc > Options > AddOns > Cursor Beacon, instead of a window of their own. Clicking either
+  again closes it.
+- The addon's own window is still there as a fallback, for a client that will not open its options
+  window on request, and on `/cursor window` for anyone who would rather not involve the game's
+  options window at all. `/cursor debug` says which route was taken.
+
 ## 1.5.1
 
 Fixed:

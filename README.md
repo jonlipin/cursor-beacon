@@ -5,12 +5,12 @@ a dot and a trail that follow it, sweep a wedge around it for the global cooldow
 cast, and show a small readout beside the pointer.
 
 Everything is configured from a Blizzard style options page at
-**Esc > Options > AddOns > Cursor Beacon**, or from the same controls in a standalone window with
-`/cursor` or the minimap button.
+**Esc > Options > AddOns > Cursor Beacon**. The minimap button and `/cursor` both open it there.
 
 The minimap button opens the options on a left click, turns every effect on and off on a right
 click, and can be dragged around the rim. Turn it off with "Show a minimap button" on the Cursor
-tab or with `/cursor minimap`.
+tab or with `/cursor minimap`. If a client will not open its own options window, the addon falls
+back to a window of its own, which `/cursor window` also opens on demand.
 
 ## What it does
 
@@ -62,7 +62,8 @@ layer for everything.
 
 | Command | What it does |
 | --- | --- |
-| `/cursor` | Opens the options window |
+| `/cursor` | Opens the options in the game menu |
+| `/cursor window` | Opens them in a window of their own instead |
 | `/cursor on`, `/cursor off` | Toggles every effect |
 | `/cursor size auto\|1\|2\|3` | Sets the Blizzard cursor size |
 | `/cursor minimap` | Shows or hides the minimap button |
@@ -84,5 +85,7 @@ setting exists, whether the cooldown sweep could be built and which slider art w
 into any bug report.
 
 The options page is registered as a canvas category and holds only the addon's own widgets. It does
-not create Settings proxy settings and never opens the Settings panel from addon code, because both
-of those taint Blizzard code paths on this client.
+not create Settings proxy settings, because those taint Blizzard code paths on this client. Asking
+the game to open its options window is a separate matter: the minimap button and `/cursor` do that,
+and if it ever causes trouble, `/cursor window` opens the addon's own window instead and touches
+nothing of the game's.
