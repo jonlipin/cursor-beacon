@@ -816,12 +816,22 @@ end
 
 local minimapButton
 
--- math.atan2 was dropped in later Lua versions and the game supplies its own atan2, so take
--- whichever exists.
-local function Atan2(y, x)
-	if atan2 then return atan2(y, x) end
-	if math.atan2 then return math.atan2(y, x) end
-	return math.atan(y, x)
+-- Returns the angle in DEGREES, which is the trap here. The game adds its own global atan2 that
+-- already answers in degrees, while math.atan2 answers in radians, so running math.deg over
+-- whichever one happened to exist multiplied the angle by about fifty seven and sent the button
+-- spinning round the rim. Each route is converted on its own terms.
+local function AngleDegrees(y, x)
+	if math.atan2 then
+		report["minimap angle"] = report["minimap angle"] or "math.atan2, radians"
+		return math.deg(math.atan2(y, x))
+	end
+	if atan2 then
+		-- The game's own global, already in degrees.
+		report["minimap angle"] = report["minimap angle"] or "the game's atan2, degrees"
+		return atan2(y, x)
+	end
+	report["minimap angle"] = report["minimap angle"] or "math.atan, radians"
+	return math.deg(math.atan(y, x))
 end
 
 local function PlaceMinimapButton()
@@ -880,7 +890,7 @@ local function BuildMinimapButton()
 			local scale = Minimap:GetEffectiveScale()
 			local cx, cy = GetCursorPosition()
 			if not (mx and my and cx and cy and scale and scale ~= 0) then return end
-			ns.db.minimap.angle = math.deg(Atan2(cy / scale - my, cx / scale - mx)) % 360
+			ns.db.minimap.angle = AngleDegrees(cy / scale - my, cx / scale - mx) % 360
 			PlaceMinimapButton()
 		end)
 	end)

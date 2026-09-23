@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.1
+
+Fixed:
+
+- **The minimap button swung wildly while being dragged.** The game adds its own `atan2` that
+  answers in degrees, alongside the standard one that answers in radians. The drag ran a radians to
+  degrees conversion over whichever it found, so on a client with the degree based one the angle
+  came out about fifty seven times too large and the button raced round the rim. Each route is now
+  converted on its own terms, and `/cursor debug` says which one this client used.
+
 ## 1.5.0
 
 Added:
