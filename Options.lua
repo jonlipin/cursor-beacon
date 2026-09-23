@@ -451,7 +451,7 @@ local function BuildPointerPage(parent)
 		Note(layout, "This client does not carry the pointer art this feature copies, so it is switched off. Everything else in the addon still works.", nil, 2)
 		return
 	end
-	Note(layout, "Draws a copy of the pointer at any size you like, which is how the cursor gets bigger than the 64 pixel limit on the game's own setting. The game always draws its real cursor on top of this; the Hide cursor tab is the only way around that.", nil, 4)
+	Note(layout, "Draws a copy of the pointer at any size you like, which is how the cursor gets bigger than the 64 pixel limit on the game's own setting. The game always draws its real cursor on top of this and no addon can change that; the Real cursor tab explains why and what to do about it.", nil, 4)
 	Check(layout, "Draw a larger pointer", "Adds a scalable pointer under the real one.",
 		function() return ns.db.pointer.enabled end, function(v) ns.db.pointer.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.pointerArt),
@@ -476,32 +476,36 @@ local function BuildPointerPage(parent)
 		function(v) return v .. "px" end, nil, 24)
 end
 
-local function BuildHidePage(parent)
+local function BuildRealCursorPage(parent)
 	local layout = NewLayout(parent)
 
-	Header(layout, "Hiding the game's cursor")
-	Note(layout, "Nothing an addon draws can sit above the game's own cursor: it is put on screen after the whole interface, and no draw layer reaches past it. The only lever the game gives an addon is to ask for the cursor art to be dropped entirely, which is what this does.", nil, 4)
-	Check(layout, "Hide the game's own cursor", "Asks the game to drop the cursor art so only the drawn pointer is left.",
-		function() return ns.db.pointer.hideReal end,
-		function(v)
-			ns.db.pointer.hideReal = v
-			-- Hiding the real cursor with nothing drawn in its place would leave nothing at all.
-			if v then ns.db.pointer.enabled = true end
-		end)
-	Note(layout, "Two limits come with it, both from the client rather than from this addon. Out in the open world the game locks the cursor to whatever you are pointing at and ignores the request, so the real cursor still shows there. And anything you pick up rides on the cursor, so hiding pauses while you are carrying an item.", 24, 5)
+	Header(layout, "The game's own cursor")
+	Note(layout, "The drawn pointer always has the game's real cursor sitting on top of it, and there is nothing an addon can do about that. The cursor is not part of the interface: it is put on screen after the whole thing is drawn, so there is no layer above it to draw into, and no draw layer setting reaches it.", nil, 4)
+	Note(layout, "Version 1.2.0 tried to hide the real cursor instead. This client refuses that: asking for any art that is not one of the game's own cursors paints a black square where the cursor was, and replacing cursor art has been blocked since Cataclysm. The switch is gone, and if you had it on, your cursor and your Hardware Cursor video setting were put back when you logged in.", nil, 5)
 
-	Header(layout, "Hardware cursor")
-	if ns.HardwareCursorSupported() then
-		Check(layout, "Turn the hardware cursor off", "The same box as Hardware Cursor in the game's video options.",
-			function() return ns.db.pointer.softwareCursor end,
-			function(v)
-				ns.db.pointer.softwareCursor = v
-				ns.ApplyHardwareCursor(true)
-			end)
-		Note(layout, "With the hardware cursor off the game draws the cursor itself instead of handing it to Windows, which is what lets it be hidden in more places. The cost is a little cursor lag, and it may want a restart to take hold.", 24, 4)
-	else
-		Note(layout, "This client does not expose the hardware cursor setting. If the hiding above does not take, look for a Hardware Cursor box in the game's video options and turn it off by hand.", nil, 3)
-	end
+	Header(layout, "What does work")
+	Note(layout, "Make the real cursor as small as it goes and the drawn one large. The small arrow then sits inside the big one's silhouette near the tip rather than beside it, which reads as a single large pointer. Leaving the drawn pointer white helps, because the real cursor is white too.", nil, 4)
+
+	local shrink
+	local ok, made = pcall(CreateFrame, "Button", nil, parent, "UIPanelButtonTemplate")
+	shrink = (ok and made) or CreateFrame("Button", nil, parent)
+	shrink:SetSize(220, 24)
+	shrink:SetText("Set the game cursor to its smallest")
+	shrink:SetScript("OnClick", function()
+		if not ns.CursorSizeSupported() then
+			ns.Print("this client does not expose the cursor size setting.")
+			return
+		end
+		ns.db.applyCursorSize = true
+		ns.db.cursorSize = 0
+		ns.ApplyCursorSize()
+		ns.SyncOptions()
+		ns.Print("the game's cursor is set to its smallest.")
+	end)
+	Tooltip(shrink, "Smallest game cursor", "Sets the game's own cursor to 32 pixels, the same as the Small button on the Cursor tab.")
+	Place(layout, shrink, 32)
+
+	Note(layout, "The nudge sliders on the Big pointer tab line the drawn tip up with the real one.", nil, 2)
 end
 
 local function BuildRingPage(parent)
@@ -580,6 +584,7 @@ local function BuildTrailPage(parent)
 		{ value = "both", label = "Both" },
 	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
 		"Sweeps a wedge around the cursor for the global cooldown, for what you are casting, or for both.")
+	Note(layout, "Type /cursor test to run the sweep for four seconds without waiting for a cast.", nil, 2)
 	Slider(layout, "Size", 16, 400, 2,
 		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
 		function(v) return v .. "px" end, nil, 24)
@@ -612,6 +617,19 @@ local function BuildInfoPage(parent)
 		function(v) return v .. "px" end, nil, 24)
 
 	Header(layout, "What to show")
+	-- A live line rather than a fixed one: whether the unit numbers can be read is only known
+	-- once the character is in the world, which is after this page is built.
+	local status = Note(layout, " ", nil, 3)
+	widgets[#widgets + 1] = { refresh = function()
+		if not ns.db.info.enabled then
+			status:SetText("The readout is switched off above, so none of these will show.")
+		elseif ns.NumbersReadable and not ns.NumbersReadable() then
+			status:SetText("This client will not let an addon read health or power, so those three are drawn as bars instead of percentages. Target name and the rest are plain text.")
+		else
+			status:SetText("Health and power are drawn as bars, with a percentage on them where the client allows it.")
+		end
+	end }
+
 	-- Two columns of checkboxes so the list stays on one screen.
 	local startY = layout.y
 	local half = math.ceil(#ns.INFO_FIELDS / 2)
@@ -658,7 +676,7 @@ end
 local PAGES = {
 	{ key = "cursor", label = "Cursor", build = BuildCursorPage },
 	{ key = "pointer", label = "Big pointer", build = BuildPointerPage },
-	{ key = "hide", label = "Hide cursor", build = BuildHidePage },
+	{ key = "hide", label = "Real cursor", build = BuildRealCursorPage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
 	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
 	{ key = "info", label = "Information", build = BuildInfoPage },

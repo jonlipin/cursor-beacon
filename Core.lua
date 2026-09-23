@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.3.0"
+ns.version = "1.4.0"
 ns.report = {}
 
 local report = ns.report
@@ -55,10 +55,6 @@ ns.defaults = {
 		shadow = true,
 		offsetX = 0,
 		offsetY = 0,
-		-- The game composites its own cursor above everything an addon can draw, so the only way
-		-- to get the drawn pointer on top is to take the real one away.
-		hideReal = false,
-		softwareCursor = false,
 	},
 
 	ring = {
@@ -194,31 +190,56 @@ function ns.CurrentCursorSize()
 end
 
 -- ------------------------------------------------------------------
--- The hardware cursor toggle, which is the "Hardware Cursor" box in the game's video options.
--- A software cursor is drawn by the game rather than handed to the operating system, which is
--- what lets SetCursor hide it in more places.
+-- Undoing version 1.2.0
+--
+-- 1.2.0 tried to hide the game's cursor so the drawn pointer could be the only one on screen. The
+-- client refuses it: SetCursor with anything that is not one of the game's own cursors paints a
+-- 32 by 32 black square instead, and custom cursor art has been blocked since Cataclysm. 1.2.0
+-- could also switch the game to a software cursor to help that along. Both are gone, and anyone
+-- upgrading gets their cursor and their video setting put back.
 -- ------------------------------------------------------------------
 
 local GX_CVAR = "gxCursor"
 
-function ns.HardwareCursorSupported()
-	if ns.gxCursorOK == nil then
-		local value = GetCVarSafe(GX_CVAR)
-		ns.gxCursorOK = value ~= nil
-		report["hardware cursor cvar"] = value ~= nil and ("ok (currently " .. tostring(value) .. ")") or "not on this client"
+local function UndoCursorHiding()
+	local pointer = ns.db and ns.db.pointer
+	if not pointer then return end
+
+	if pointer.hideReal then
+		pointer.hideReal = nil
+		if ns.Effects and ns.Effects.RestoreCursor then pcall(ns.Effects.RestoreCursor, true) end
+		report["1.2.0 cleanup"] = "the game's cursor was hidden, it has been put back"
 	end
-	return ns.gxCursorOK
+	if pointer.softwareCursor then
+		pointer.softwareCursor = nil
+		if GetCVarSafe(GX_CVAR) == "0" then
+			SetCVarSafe(GX_CVAR, "1")
+			report["1.2.0 cleanup"] = (report["1.2.0 cleanup"] and (report["1.2.0 cleanup"] .. "; ") or "")
+				.. "the hardware cursor has been switched back on"
+		end
+	end
 end
 
--- Only writes the CVar when the user asked for the software cursor. `force` is passed when they
--- turn the option off, which is the one time we put the game's own setting back.
-function ns.ApplyHardwareCursor(force)
-	if not ns.db or not ns.HardwareCursorSupported() then return end
-	if ns.db.pointer.softwareCursor then
-		SetCVarSafe(GX_CVAR, "0")
-	elseif force then
-		SetCVarSafe(GX_CVAR, "1")
+-- ------------------------------------------------------------------
+-- Unit numbers
+--
+-- This client protects some unit values: an addon may hand them to a widget to draw but may not
+-- read, compare or print them. Health and power are the ones this addon cares about, so it probes
+-- once and shows them as bars rather than as a percentage when they cannot be read.
+-- ------------------------------------------------------------------
+
+function ns.NumbersReadable()
+	if ns.numbersReadable == nil then
+		local ok, usable = pcall(function()
+			local max, cur = UnitHealthMax("player"), UnitHealth("player")
+			if issecretvalue and (issecretvalue(max) or issecretvalue(cur)) then return false end
+			return type(max) == "number" and type(cur) == "number" and max > 0
+		end)
+		ns.numbersReadable = (ok and usable) and true or false
+		report["unit numbers"] = ns.numbersReadable and "readable, health and power can show a percentage"
+			or "protected by the client, health and power show as bars"
 	end
+	return ns.numbersReadable
 end
 
 -- ------------------------------------------------------------------
@@ -383,15 +404,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if CountKeys(CursorBeaconDB) == 0 then LoadDB("player login") end
 		ns.CursorSizeSupported()
 		ns.ApplyCursorSize()
-		ns.HardwareCursorSupported()
-		ns.ApplyHardwareCursor()
+		UndoCursorHiding()
+		ns.NumbersReadable()
 		ns.Refresh()
 		if ns.SyncOptions then pcall(ns.SyncOptions) end
 
 	elseif event == "PLAYER_LOGOUT" then
 		MirrorToAccount()
-		-- Never leave the session with the game's cursor hidden.
-		if ns.Effects and ns.Effects.RestoreCursor then pcall(ns.Effects.RestoreCursor) end
 
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		ns.Refresh()
@@ -421,6 +440,7 @@ local function PrintHelp()
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor|r opens the options window")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor on|r or |cffffff00off|r toggles every effect")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor size auto|1|2|3|r sets the Blizzard cursor size")
+	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor test|r runs the activity sweep for a few seconds")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor reset|r restores defaults")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor debug|r prints what resolved on this client")
 	DEFAULT_CHAT_FRAME:AddMessage("   Options also live in Esc > Options > AddOns > Cursor Beacon.")
@@ -436,6 +456,17 @@ SlashCmdList["CURSORBEACON"] = function(msg)
 		if ns.ToggleOptions then ns.ToggleOptions() else Print("Options are not built yet.") end
 	elseif cmd == "debug" then
 		PrintDebug()
+	elseif cmd == "test" then
+		if not (ns.Effects and ns.Effects.PreviewActivity) then
+			Print("the activity sweep was not built on this client, see /cursor debug.")
+			return
+		end
+		local why = ns.Effects.PreviewActivity(4)
+		if why then
+			Print(why)
+		else
+			Print("running the activity sweep for four seconds. If you see nothing, paste /cursor debug here.")
+		end
 	elseif cmd == "reset" then
 		ns.ResetToDefaults()
 	elseif cmd == "on" or cmd == "off" then

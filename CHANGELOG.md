@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.4.0
+
+Three things that did not work.
+
+Fixed:
+
+- **The activity sweep drew nothing.** A bare Cooldown widget has no art of its own, and without a
+  swipe texture it runs its timer and shows nothing at all. It has one now. `/cursor test` runs the
+  sweep for four seconds so it can be checked without waiting for a cast, and it says so when
+  something else, like combat only, would have kept it hidden anyway.
+- **Target health, your health and your power showed nothing.** This client hands those over as
+  values an addon may draw but may not read, so working out a percentage quietly produced nothing
+  while the box stayed ticked. They are now drawn as small bars fed straight from the game, which
+  never reads or compares the value. Where a client does allow reading, the bar also carries a
+  percentage. The Information tab says which of the two is happening. Target name was text all
+  along, which is why it was the one that worked.
+
+Removed:
+
+- **Hiding the game's own cursor, which painted a black square.** This client refuses any cursor
+  art that is not one of its own, and replacing cursor art has been blocked since Cataclysm. There
+  is no layer above the cursor to draw into either: it goes on screen after the whole interface, so
+  no draw layer setting reaches it. The switch is gone, along with the hardware cursor switch that
+  went with it. Anyone who had them on gets their cursor and their video setting put back on the
+  next login, and `/cursor debug` records that it happened.
+- The Hide cursor tab is now the Real cursor tab. It explains why the drawn pointer cannot go on
+  top and offers the thing that does help: one click to set the game's cursor to its smallest, so
+  the real arrow sits inside the big drawn one instead of beside it.
+
 ## 1.3.0
 
 The drawn art keeps up with the cursor.

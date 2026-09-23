@@ -140,11 +140,16 @@ function Effects.Init()
 		activity = cd
 		activity:SetPoint("CENTER", anchor, "CENTER", 0, 0)
 		activity:SetHideCountdownNumbers(true)
-		if activity.SetDrawEdge then pcall(activity.SetDrawEdge, activity, true) end
+		-- A bare Cooldown has no art of its own. Without a swipe texture it runs its timer and
+		-- draws nothing at all, which is exactly what it looked like before this was set.
+		local textured = activity.SetSwipeTexture
+			and pcall(activity.SetSwipeTexture, activity, "Interface\\Buttons\\WHITE8X8")
+		if activity.SetDrawSwipe then pcall(activity.SetDrawSwipe, activity, true) end
+		if activity.SetDrawEdge then pcall(activity.SetDrawEdge, activity, false) end
 		if activity.SetDrawBling then pcall(activity.SetDrawBling, activity, false) end
 		activity:EnableMouse(false)
 		activity:Hide()
-		report["activity swipe"] = "ok"
+		report["activity swipe"] = textured and "ok" or "built, but this client has no SetSwipeTexture"
 	else
 		report["activity swipe"] = "unavailable (CooldownFrameTemplate missing)"
 	end
@@ -256,69 +261,19 @@ function Effects.Apply()
 	if not db.enabled then
 		overlay:Hide()
 	end
-	if not (db.enabled and db.pointer.enabled and db.pointer.hideReal) then
-		Effects.RestoreCursor()
-	end
 end
 
 -- ------------------------------------------------------------------
--- Hiding the game's own cursor
+-- Putting the game's cursor back
 --
--- Nothing an addon draws can sit above the hardware cursor: the game composites it last. The one
--- lever the API gives us is SetCursor with a path that does not resolve, which hides the cursor
--- art. Two limits come with it and neither is something this addon can work around:
---   * over WorldFrame the game locks the cursor to what you are pointing at and ignores us, so
---     the real cursor stays visible out in the world;
---   * whatever you pick up rides on the cursor, so hiding pauses while you are carrying something.
+-- 1.2.0 tried to hide the game's own cursor with SetCursor so the drawn pointer could be the only
+-- one on screen. This client refuses it: anything that is not one of the game's own cursors comes
+-- out as a 32 by 32 black square, and custom cursor art has been blocked since Cataclysm. The
+-- feature is gone; this is only here to undo it for anyone upgrading.
 -- ------------------------------------------------------------------
-
--- Deliberately not a real file. SetCursor hides the cursor when the path does not resolve.
-local HIDE_PATH = "Interface\\AddOns\\CursorBeacon\\NoCursor"
-
-local hideThrottle = 0
-local cursorHidden = false
-
-local function CarryingSomething()
-	if not GetCursorInfo then return false end
-	local ok, kind = pcall(GetCursorInfo)
-	return ok and kind ~= nil
-end
 
 function Effects.RestoreCursor()
-	if not cursorHidden then return end
-	cursorHidden = false
-	ns.cursorHidden = false
-	pcall(SetCursor, nil)
-end
-
--- `drawing` is whether the effects are visible this frame; there is no sense hiding the real
--- cursor while our own pointer is hidden too.
-local function UpdateCursorHiding(elapsed, drawing)
-	local db = ns.db
-	local want = drawing and db.enabled and db.pointer.enabled and db.pointer.hideReal
-		and pointer and pointer:IsShown() and not CarryingSomething()
-
-	if not want then
-		Effects.RestoreCursor()
-		return
-	end
-
-	-- The interface sets the cursor itself whenever the mouse moves over something, so this has
-	-- to be put back rather than set once.
-	hideThrottle = hideThrottle + elapsed
-	if hideThrottle > 0.05 or not cursorHidden then
-		hideThrottle = 0
-		local ok = pcall(SetCursor, HIDE_PATH)
-		if report["hide cursor"] == nil then
-			report["hide cursor"] = ok and "ok (no effect over the open world)" or "SetCursor refused it"
-		end
-		if not ok then
-			db.pointer.hideReal = false
-			return
-		end
-	end
-	cursorHidden = true
-	ns.cursorHidden = true
+	return (pcall(SetCursor, nil))
 end
 
 -- ------------------------------------------------------------------
@@ -340,8 +295,33 @@ local function GCDInfo()
 	return start, duration
 end
 
+-- "/cursor test" runs the sweep for a few seconds so it can be checked without waiting for a cast.
+-- It deliberately ignores the mode, and reports anything that would stop it being seen.
+local previewStart, previewDuration = 0, 0
+
+function Effects.PreviewActivity(seconds)
+	if not activity then
+		return "the activity sweep could not be built on this client, see /cursor debug."
+	end
+	if not ns.db.enabled then
+		return "every effect is switched off. Run /cursor on first."
+	end
+	if ns.db.combatOnly and not InCombat() then
+		return "the effects are set to combat only, so nothing will show out of combat."
+	end
+	previewStart, previewDuration = GetTime(), seconds or 4
+	return nil
+end
+
 -- Returns start, duration, isChannel for whatever the swipe should be showing, or nil.
 local function ActivityState()
+	if previewStart > 0 then
+		if GetTime() < previewStart + previewDuration then
+			return previewStart, previewDuration, false
+		end
+		previewStart = 0
+	end
+
 	local mode = ns.db.activity.mode
 	if mode == "off" then return nil end
 
@@ -417,7 +397,6 @@ function Effects.OnUpdate(_, elapsed)
 	if ns.Info and ns.Info.Tick then ns.Info.Tick(elapsed, lx, ly) end
 
 	if not ShouldDraw() then
-		UpdateCursorHiding(elapsed, false)
 		overlay:Hide()
 		-- Park the trail on the cursor so it does not whip across the screen when it comes back.
 		for i = 1, MAX_TRAIL do trail[i].x, trail[i].y = x, y end
@@ -470,8 +449,6 @@ function Effects.OnUpdate(_, elapsed)
 			AlphaIfChanged(pointerShadow, db.pointer.alpha * master * 0.6)
 		end
 	end
-
-	UpdateCursorHiding(elapsed, true)
 
 	-- Trail. Each segment eases toward the one in front of it; the smoothing is corrected for
 	-- frame time so the shape looks the same at 30 and at 144 frames a second.

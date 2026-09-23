@@ -18,14 +18,13 @@ draw a copy of the pointer at any size from 32 to 512 pixels, in a choice of the
 shapes, with a colour tint, an optional dark outline and two nudge sliders. Each shape knows where
 its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centres on it.
 
-**Hiding the real cursor.** The game puts its own cursor on screen after the whole interface, and
-no draw layer an addon can reach goes past it, so nothing can be drawn over it. The only lever the
-API gives an addon is to ask for the cursor art to be dropped, and the Hide cursor tab does that.
-Two limits come with it, both from the client: out in the open world the game locks the cursor to
-whatever you are pointing at and ignores the request, so the real cursor still shows there, and
-hiding pauses while you are carrying something so you can see what you picked up. The same tab can
-turn off the hardware cursor (the Hardware Cursor box in the game's video options), which makes the
-game draw the cursor itself and lets it be hidden in more places, at the cost of a little lag.
+**The real cursor is always on top, and that cannot be changed.** The game puts its own cursor on
+screen after the whole interface is drawn, so there is no layer above it for an addon to draw into
+and no draw layer setting that reaches it. Hiding it does not work either: this client refuses any
+cursor art that is not one of its own and paints a black square instead, and replacing cursor art
+has been blocked since Cataclysm. What does help is on the Real cursor tab: set the game's cursor
+to its smallest and the drawn pointer large, and the small arrow sits inside the big one's
+silhouette near the tip rather than beside it.
 
 **Ring.** A coloured ring around the cursor, with a choice of shapes, size, opacity, colour and an
 optional slow spin. It can swell when the cursor is over a unit or a button, which makes clickable
@@ -40,9 +39,11 @@ looks the same at 30 frames a second as at 144.
 **Activity sweep.** A cooldown style wedge around the cursor showing the global cooldown, the spell
 you are casting or channelling, or both.
 
-**Cursor readout.** A short block of text beside the pointer. Pick any of: target name and level,
-target health, your health, your power, a combat warning, map coordinates, frame rate, latency and
-the clock.
+**Cursor readout.** A short block of text beside the pointer: target name and level, a combat
+warning, map coordinates, frame rate, latency and the clock. Target health, your health and your
+power come as small bars under the text, because this client hands those values over as something
+an addon may draw but may not read. A bar takes the value exactly as the game gives it, so it works
+either way; where a client does allow reading, the bar also carries a percentage.
 
 **Keeping up.** The game puts its own cursor where the mouse is right now, while anything an addon
 draws is positioned during the frame and only reaches the screen on the next one, so it trails
@@ -60,6 +61,7 @@ layer for everything.
 | `/cursor` | Opens the options window |
 | `/cursor on`, `/cursor off` | Toggles every effect |
 | `/cursor size auto\|1\|2\|3` | Sets the Blizzard cursor size |
+| `/cursor test` | Runs the activity sweep for four seconds |
 | `/cursor reset` | Restores the defaults |
 | `/cursor debug` | Prints what resolved on this client |
 
