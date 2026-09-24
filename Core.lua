@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.6.0"
+ns.version = "1.6.1"
 ns.report = {}
 
 local report = ns.report

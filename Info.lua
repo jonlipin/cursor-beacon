@@ -1,9 +1,12 @@
 -- Cursor Beacon
 -- Info: a small readout that rides next to the cursor.
 --
--- Every field is built inside its own pcall. This client carries protected "secret" values on
--- some unit data, and reading one of those throws; a field that fails is simply dropped from
--- the readout and recorded in the debug report instead of taking the addon down.
+-- Text fields and bars are two different things here, and the reason is the client. Some unit
+-- values are protected: an addon may hand them to a widget to draw but may not read, compare or
+-- print them. Working out a percentage from one quietly produces nothing at all, so health and
+-- power are drawn as bars fed with the raw value, and only carry a percentage where a probe shows
+-- the numbers are plain. Every field is built inside its own pcall regardless, and one that fails
+-- is dropped from the readout and recorded in the debug report rather than taking the addon down.
 
 local ADDON, ns = ...
 

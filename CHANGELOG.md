@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.1
+
+Housekeeping, no change to how anything behaves.
+
+- The offline test harness now ships in the repository under `tests/`, with notes on running it.
+  It covers 165 checks and runs in four modes, each one taking something away from the stubbed
+  client to prove the addon degrades rather than breaks.
+- Added the project website, category and licence to the addon's own details.
+- Cleared out two leftovers that were written and never read, and brought the note at the top of
+  the readout code in line with what the client actually does with protected values.
+
 ## 1.6.0
 
 Changed:

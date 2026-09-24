@@ -24,7 +24,6 @@ local PANE_W = CONTENT_W - PANE_X - 14
 local content, window, page
 local pages, navButtons = {}, {}
 local widgets = {}
-local currentPage = "cursor"
 local uniqueID = 0
 
 local function NextName(prefix)
@@ -148,7 +147,7 @@ local function Note(layout, label, indent, lines)
 	return fs
 end
 
-local function Check(layout, label, tooltip, get, set, indent, width)
+local function Check(layout, label, tooltip, get, set, indent)
 	local cb
 	for _, template in ipairs({ "UICheckButtonTemplate", "ChatConfigCheckButtonTemplate" }) do
 		local ok, made = pcall(CreateFrame, "CheckButton", NextName("Check"), layout.parent, template)
@@ -179,7 +178,6 @@ local function Check(layout, label, tooltip, get, set, indent, width)
 	Tooltip(cb, label, tooltip)
 
 	Place(layout, cb, 26, indent)
-	if width then cb.cbColumnWidth = width end
 	widgets[#widgets + 1] = { refresh = function() cb:SetChecked(get() and true or false) end }
 	return cb
 end
@@ -692,7 +690,6 @@ local PAGES = {
 }
 
 local function ShowPage(key)
-	currentPage = key
 	for _, entry in ipairs(PAGES) do
 		if pages[entry.key] then pages[entry.key]:SetShown(entry.key == key) end
 		local button = navButtons[entry.key]
