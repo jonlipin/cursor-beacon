@@ -802,26 +802,102 @@ end
 -- code inside our execution, and on this client that has previously spread taint into unrelated
 -- frames. The page itself is safe, it holds nothing but this addon's own widgets and registers no
 -- proxy settings. Only this one call carries the risk, and it is what the game menu route needs.
+-- The category's ID, which is what Settings.OpenToCategory actually documents. Passing the
+-- category itself is accepted by some builds and quietly ignored by others.
+local function CategoryID()
+	local category = ns.optionsCategory
+	if not category then return nil end
+	if category.GetID then
+		local ok, id = pcall(category.GetID, category)
+		if ok and id then return id end
+	end
+	return category.ID or category.id
+end
+
+local function PanelIsOpen()
+	if SettingsPanel and SettingsPanel.IsShown then return SettingsPanel:IsShown() and true or false end
+	return false
+end
+
+-- True once our page is actually on screen. Everything below is checked against this rather than
+-- against whether a call raised an error, because the call that does nothing does not error.
+local function PageIsOpen()
+	if not page then return false end
+	if page.IsVisible then return page:IsVisible() and true or false end
+	return page:IsShown() and true or false
+end
+
+local function ShowPanel()
+	if not SettingsPanel then return end
+	if SettingsPanel.Open then
+		if pcall(SettingsPanel.Open, SettingsPanel) then return end
+	end
+	if ShowUIPanel then pcall(ShowUIPanel, SettingsPanel) end
+end
+
+-- Settings.OpenToCategory NAVIGATES to a category, it does not necessarily open the window. With
+-- the window shut it can quietly do nothing, which is why the first route opens the window itself
+-- before navigating. Each route is tried in turn and judged on whether the page ended up visible.
+local OPEN_ROUTES = {
+	{
+		name = "opening the window, then the category id",
+		run = function()
+			ShowPanel()
+			local id = CategoryID()
+			if id and Settings and Settings.OpenToCategory then
+				pcall(Settings.OpenToCategory, id)
+			end
+		end,
+	},
+	{
+		name = "the category id",
+		run = function()
+			local id = CategoryID()
+			if id and Settings and Settings.OpenToCategory then
+				pcall(Settings.OpenToCategory, id)
+			end
+		end,
+	},
+	{
+		name = "the category itself",
+		run = function()
+			if Settings and Settings.OpenToCategory then
+				pcall(Settings.OpenToCategory, ns.optionsCategory)
+			end
+		end,
+	},
+	{
+		name = "the older interface options route",
+		run = function()
+			if InterfaceOptionsFrame_OpenToCategory and page then
+				-- This one wants two goes at it to land on the right panel.
+				pcall(InterfaceOptionsFrame_OpenToCategory, page)
+				pcall(InterfaceOptionsFrame_OpenToCategory, page)
+			end
+		end,
+	},
+}
+
 function ns.OpenBlizzardOptions()
 	if not ns.optionsCategory then return false end
 
-	local ok = false
-	if Settings and Settings.OpenToCategory then
-		ok = pcall(Settings.OpenToCategory, ns.optionsCategory)
-		-- Some builds want the category's ID rather than the category itself.
-		if not ok and ns.optionsCategory.GetID then
-			local fine, id = pcall(ns.optionsCategory.GetID, ns.optionsCategory)
-			if fine and id then ok = pcall(Settings.OpenToCategory, id) end
+	local panelWasOpen = PanelIsOpen()
+
+	for _, route in ipairs(OPEN_ROUTES) do
+		route.run()
+		if PageIsOpen() then
+			report["open options"] = "ok, via " .. route.name
+			return true
 		end
 	end
-	if not ok and InterfaceOptionsFrame_OpenToCategory and page then
-		-- The older route, which wants two goes at it to land on the right panel.
-		ok = pcall(InterfaceOptionsFrame_OpenToCategory, page)
-		if ok then pcall(InterfaceOptionsFrame_OpenToCategory, page) end
-	end
 
-	report["open options"] = ok and "the game's options window" or "refused, using the addon's own window"
-	return ok and true or false
+	-- Nothing worked. If one of the attempts left the game's options window open on some other
+	-- page, put it back the way it was before falling through to our own window.
+	if not panelWasOpen and PanelIsOpen() then
+		if HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+	end
+	report["open options"] = "no route worked, using the addon's own window"
+	return false
 end
 
 local function CloseBlizzardOptions()

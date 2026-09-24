@@ -173,23 +173,44 @@ rawset(ColorPickerFrame, "GetColorRGB", function() return 0.1, 0.2, 0.3 end)
 CATEGORIES = {}
 OPENED_CATEGORY = nil
 OPEN_REFUSED = false
+-- The reported behaviour of this client: OpenToCategory NAVIGATES to a category, it does not open
+-- the options window. With the window shut it quietly does nothing and raises no error, so a
+-- caller that only checks pcall thinks it worked. Opening the window is a separate call.
+OPEN_NEEDS_PANEL = OPEN_NEEDS_PANEL ~= false
+-- Some clients only accept the category id, not the category itself.
+OPEN_ID_ONLY = OPEN_ID_ONLY == true
 SettingsPanel = obj("Frame") SettingsPanel:Hide()
+SettingsPanel.Open = function(self) self:Show() end
+function ShowUIPanel(f) f:Show() end
 function HideUIPanel(f)
   f:Hide()
   if f == SettingsPanel then
     for _, c in ipairs(CATEGORIES) do c.frame:Hide() end
   end
 end
+local nextCategoryID = 0
 Settings = {
-  RegisterCanvasLayoutCategory = function(frame, name) local c = { frame = frame, name = name } CATEGORIES[#CATEGORIES + 1] = c return c end,
+  RegisterCanvasLayoutCategory = function(frame, name)
+    nextCategoryID = nextCategoryID + 1
+    local c = { frame = frame, name = name, id = "category" .. nextCategoryID }
+    c.GetID = function(self) return self.id end
+    CATEGORIES[#CATEGORIES + 1] = c
+    return c
+  end,
   RegisterAddOnCategory = function(c) c.registered = true end,
-  OpenToCategory = function(c)
+  OpenToCategory = function(which)
     if OPEN_REFUSED then error("this client will not open it") end
-    OPENED_CATEGORY = c
+    local cat
+    for _, c in ipairs(CATEGORIES) do
+      if c.id == which then cat = c end
+      if c == which and not OPEN_ID_ONLY then cat = c end
+    end
+    if not cat then return end
+    OPENED_CATEGORY = cat
+    if OPEN_NEEDS_PANEL and not SettingsPanel:IsShown() then return end
     SettingsPanel:Show()
-    c.frame.w, c.frame.h = 700, 500
-    c.frame:Show()
-    return true
+    cat.frame.w, cat.frame.h = 700, 500
+    cat.frame:Show()
   end,
 }
 `;
@@ -715,7 +736,7 @@ mm.scripts.OnClick(mm, "LeftButton")
 check("the minimap button opens the game's options", OPENED_CATEGORY == CATEGORIES[1])
 check("and the page is showing", canvasPage:IsShown())
 check("no separate window is opened", not CursorBeaconWindow:IsShown())
-check("the route is recorded", ns.report["open options"] == "the game's options window", ns.report["open options"])
+check("the route is recorded", (ns.report["open options"] or ""):sub(1, 6) == "ok, vi", ns.report["open options"])
 
 mm.scripts.OnClick(mm, "LeftButton")
 check("clicking again closes it", not canvasPage:IsShown() and not SettingsPanel:IsShown())
@@ -724,6 +745,33 @@ OPENED_CATEGORY = nil
 SlashCmdList.CURSORBEACON("")
 check("/cursor opens the same place", OPENED_CATEGORY == CATEGORIES[1] and canvasPage:IsShown())
 check("still no separate window", not CursorBeaconWindow:IsShown())
+HideUIPanel(SettingsPanel)
+
+-- The reported bug: with the options window shut, navigating to a category does nothing and does
+-- not error, so the button appeared dead unless another addon had already opened the window.
+HideUIPanel(SettingsPanel)
+OPENED_CATEGORY = nil
+check("the options window starts shut", not SettingsPanel:IsShown() and not canvasPage:IsShown())
+mm.scripts.OnClick(mm, "LeftButton")
+check("the button opens it from shut", SettingsPanel:IsShown() and canvasPage:IsShown())
+check("it opened the window rather than only navigating",
+  (ns.report["open options"] or ""):find("opening the window") ~= nil, ns.report["open options"])
+check("and no separate window crept in", not CursorBeaconWindow:IsShown())
+HideUIPanel(SettingsPanel)
+
+-- The case that already worked: another addon has the window open, we navigate into it.
+ns.report["open options"] = nil
+SettingsPanel:Show()
+mm.scripts.OnClick(mm, "LeftButton")
+check("it still works when the window is already open", canvasPage:IsShown())
+HideUIPanel(SettingsPanel)
+
+-- A client that only accepts the category id, never the category itself.
+OPEN_ID_ONLY = true
+ns.report["open options"] = nil
+mm.scripts.OnClick(mm, "LeftButton")
+check("an id only client is handled", canvasPage:IsShown(), ns.report["open options"])
+OPEN_ID_ONLY = false
 HideUIPanel(SettingsPanel)
 
 -- The escape hatch, for anyone who would rather keep the game's window out of it.
@@ -739,8 +787,9 @@ OPENED_CATEGORY = nil
 ns.report["open options"] = nil
 mm.scripts.OnClick(mm, "LeftButton")
 check("a refusal falls back to the addon's window", CursorBeaconWindow:IsShown())
-check("and says so in the debug report", (ns.report["open options"] or ""):find("refused") ~= nil,
+check("and says so in the debug report", (ns.report["open options"] or ""):find("no route worked") ~= nil,
   ns.report["open options"])
+check("and the options window is not left hanging open", not SettingsPanel:IsShown())
 OPEN_REFUSED = false
 CursorBeaconWindow:Hide()
 HideUIPanel(SettingsPanel)
