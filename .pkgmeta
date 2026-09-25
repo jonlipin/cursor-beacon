@@ -1,0 +1,8 @@
+package-as: CursorBeacon
+
+ignore:
+  - tests
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
