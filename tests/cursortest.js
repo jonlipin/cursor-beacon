@@ -918,17 +918,56 @@ else
   end
   check("the spell sits exactly under the cursor, centre to corners", worst < 0.01, worst .. " px off at worst")
 
-  -- An actor's position is in its own units: Blizzard multiplies it by the scale to get the world.
-  ns.db.model.size = 2.5
+  -- Size moves the camera rather than scaling the actor. A scaled actor keeps full sized particles
+  -- and ribbons, so it never got small enough; pulling the camera back shrinks all of it evenly.
+  local function PixelsPerUnit()
+    return tonumber((ns.report["3d calibration"] or ""):match("([%d%.]+) pixels to a unit"))
+  end
+  local fullSize = PixelsPerUnit()
+  check("the full size scale is known", fullSize and fullSize > 0, ns.report["3d calibration"])
+
+  ns.db.model.size = 0.05
   ns.Refresh()
   CURSOR = { W * 0.2, H * 0.8 }
   loop() loop()
-  check("the actor took the new size", math.abs(actor:GetScale() - 2.5) < 1e-9, actor:GetScale())
+  check("5% pulls the camera twenty times further back", math.abs(scene.cam.pos[1] - 600) < 1e-6, scene.cam.pos[1])
+  check("the actor itself stays at its own size", actor:GetScale() == 1, actor:GetScale())
+  check("so everything on screen is a twentieth the size", math.abs(PixelsPerUnit() - fullSize / 20) < 0.06,
+    PixelsPerUnit() .. " against " .. fullSize)
   local px, py = ActorOnScreen()
-  check("and still sits under the cursor, its position divided by its scale",
+  check("and it was measured again, still exactly under the cursor",
     math.abs(px - W * 0.2) < 0.01 and math.abs(py - H * 0.8) < 0.01, px .. "," .. py)
-  ns.db.model.size = 1
+
+  ns.db.model.size = 2.5
   ns.Refresh()
+  CURSOR = { W * 0.7, H * 0.15 }
+  loop() loop()
+  check("250% brings the camera in", math.abs(scene.cam.pos[1] - 12) < 1e-6, scene.cam.pos[1])
+  check("everything is two and a half times the size", math.abs(PixelsPerUnit() - fullSize * 2.5) < 0.06,
+    PixelsPerUnit() .. " against " .. fullSize)
+  px, py = ActorOnScreen()
+  check("still exactly under the cursor", math.abs(px - W * 0.7) < 0.01 and math.abs(py - H * 0.15) < 0.01, px .. "," .. py)
+
+  -- The overall size on the Cursor tab counts too.
+  ns.db.model.size = 1
+  ns.db.scale = 0.5
+  ns.Refresh()
+  loop()
+  check("the overall size moves the camera as well", math.abs(scene.cam.pos[1] - 60) < 1e-6, scene.cam.pos[1])
+  ns.db.scale = 1
+  ns.Refresh()
+  loop()
+
+  -- An actor's position is in its own units: Blizzard multiplies it by the scale to get the world,
+  -- and Blizzard's actor template rescales the actor by itself once its model loads. So the scale
+  -- is read live, and a rescale behind the addon's back must not move the effect off the cursor.
+  actor:SetScale(3)
+  CURSOR = { W * 0.4, H * 0.6 }
+  loop() loop()
+  px, py = ActorOnScreen()
+  check("an actor rescaled behind the addon's back still sits under the cursor",
+    math.abs(px - W * 0.4) < 0.01 and math.abs(py - H * 0.6) < 0.01, px .. "," .. py)
+  actor:SetScale(1)
 
   -- A warp across the screen reloads the model, so its ribbon starts fresh rather than streaking.
   CURSOR = { W * 0.5, H * 0.5 } loop() loop()

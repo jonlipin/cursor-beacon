@@ -630,10 +630,11 @@ local function BuildSpellPage(parent)
 	Choice(layout, "Spell", choices,
 		function() return ns.db.model.file end, function(v) ns.db.model.file = v end, nil, 24)
 
-	Slider(layout, "Size", 20, 400, 5,
+	Slider(layout, "Size", 5, 400, 1,
 		function() return math.floor(ns.db.model.size * 100 + 0.5) end,
 		function(v) ns.db.model.size = v / 100 end,
-		function(v) return v .. "%" end, "Also follows the overall size on the Cursor tab.", 24)
+		function(v) return v .. "%" end,
+		"Shrinks the whole effect evenly, trail and sparks included, not just the missile. Also follows the overall size on the Cursor tab.", 24)
 	Slider(layout, "Opacity", 10, 100, 5,
 		function() return math.floor(ns.db.model.alpha * 100 + 0.5) end,
 		function(v) ns.db.model.alpha = v / 100 end,

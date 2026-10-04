@@ -49,10 +49,17 @@ ns.SPELL_MODELS = {
 	{ id = 382336, label = "Shadow Fireball" },
 }
 
--- The camera. Its distance and field of view only decide how big a model looks at size 1; the
--- mapping is measured afterwards, so these can change without anything else having to.
+-- The camera. Its distance and field of view decide how big a model looks; the mapping is measured
+-- afterwards, so they can change without anything else having to.
+--
+-- Size is done by moving the camera, not by scaling the actor. A spell's particles and ribbons
+-- keep their own size when the actor is scaled (the game even has a separate particle scale for
+-- that), so a scaled down missile kept a full sized trail and never got small enough. Moving the
+-- camera away shrinks everything on screen evenly, model, ribbon and sparks alike, because it is
+-- only perspective. At size 1 the camera sits at CAMERA_DISTANCE; at size s it sits at that over s.
 local CAMERA_DISTANCE = 30
 local CAMERA_FOV = 0.6
+local cameraDistance = CAMERA_DISTANCE
 
 -- A jump this far in one frame is a warp rather than movement. Without a reset the ribbon would
 -- draw a streak right across the screen to the new spot.
@@ -155,8 +162,8 @@ function Models.ForgetCalibration() calib = nil end
 local function SetupCamera()
 	pcall(scene.SetCameraFieldOfView, scene, CAMERA_FOV)
 	pcall(scene.SetCameraNearClip, scene, 0.1)
-	pcall(scene.SetCameraFarClip, scene, 1000)
-	pcall(scene.SetCameraPosition, scene, CAMERA_DISTANCE, 0, 0)
+	pcall(scene.SetCameraFarClip, scene, 5000)
+	pcall(scene.SetCameraPosition, scene, cameraDistance, 0, 0)
 	-- Forward, right, up. Which way "right" points depends on the client's handedness. It does
 	-- not matter here: calibration measures whatever results.
 	pcall(scene.SetCameraOrientationByAxisVectors, scene, -1, 0, 0, 0, 1, 0, 0, 0, 1)
@@ -242,7 +249,17 @@ function Models.Apply()
 	scene:SetFrameLevel(205)
 
 	if not actor then return end
-	pcall(actor.SetScale, actor, db.model.size * (db.scale or 1))
+
+	-- The actor stays at its own size; the camera moves to make it bigger or smaller, and a new
+	-- distance means a new mapping, so it is measured again on the next frame.
+	local size = math.max(0.01, db.model.size * (db.scale or 1))
+	local wanted = CAMERA_DISTANCE / size
+	if math.abs(wanted - cameraDistance) > 1e-6 then
+		cameraDistance = wanted
+		pcall(scene.SetCameraPosition, scene, cameraDistance, 0, 0)
+		calib = nil
+	end
+	pcall(actor.SetScale, actor, 1)
 
 	local id = WantedId()
 	if id and id ~= loadedId then
