@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.7.1"
+ns.version = "1.8.0"
 ns.report = {}
 
 local report = ns.report
@@ -101,6 +101,9 @@ ns.defaults = {
 		size = 1.0,
 		alpha = 1.0,
 		aim = false,
+		-- How many copies of the missile are layered on the same spot, 1 to 5. More copies give
+		-- more particles and, since spell particles add their light together, a brighter trail.
+		density = 1,
 	},
 
 	activity = {

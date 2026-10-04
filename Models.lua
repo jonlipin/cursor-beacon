@@ -33,20 +33,50 @@ ns.Models = Models
 
 local report = ns.report
 
--- Spell missiles by FileDataID. The ones this client does not carry are dropped when the addon
--- tries to load them, so a client missing some of these simply offers fewer.
+-- Spell missiles by FileDataID, grouped by school. The ones this client does not carry are dropped
+-- when the addon tries to load them, so a client missing some of these simply offers fewer. Ids
+-- come from the wago.tools file list (spells/*_missile.m2); keep to the vanilla era block below
+-- 200000 where possible, since those are the most likely to be in a classic era client.
 ns.SPELL_MODELS = {
+	-- Shadow
 	{ id = 166815, label = "Shadow Bolt" },
-	{ id = 165569, label = "Arcane Missiles" },
+	{ id = 165891, label = "Death Coil" },
+	{ id = 167163, label = "Haunt" },
+	{ id = 166926, label = "Soul Shatter" },
+	{ id = 166822, label = "Shadow Missile" },
+	{ id = 382336, label = "Shadow Fireball" },
+	-- Fire
 	{ id = 166128, label = "Fireball" },
+	{ id = 166674, label = "Pyroblast" },
+	{ id = 166135, label = "Firebolt" },
+	{ id = 166127, label = "Blue Fireball" },
+	{ id = 166673, label = "Blue Pyroblast" },
+	{ id = 166074, label = "Fel Fireball" },
+	{ id = 166094, label = "Fel Pyroblast" },
+	{ id = 166553, label = "Meteor" },
+	-- Frost and water
 	{ id = 166214, label = "Frostbolt" },
 	{ id = 166374, label = "Ice" },
+	{ id = 166373, label = "Ice Lance" },
+	{ id = 167174, label = "Waterbolt" },
+	-- Arcane
+	{ id = 165569, label = "Arcane Missiles" },
+	{ id = 166513, label = "Arcane Barrage" },
+	{ id = 165592, label = "Arcane Shot" },
+	{ id = 166942, label = "Spellsteal" },
+	-- Nature
 	{ id = 167213, label = "Wrath" },
-	{ id = 166330, label = "Holy" },
-	{ id = 166333, label = "Holy, bright" },
 	{ id = 166497, label = "Lightning" },
 	{ id = 166498, label = "Lightning, long" },
-	{ id = 382336, label = "Shadow Fireball" },
+	{ id = 166504, label = "Lightning Streak" },
+	{ id = 166648, label = "Poison Shot" },
+	-- Holy
+	{ id = 166330, label = "Holy" },
+	{ id = 166333, label = "Holy, bright" },
+	{ id = 166661, label = "Penance" },
+	-- Odds and ends
+	{ id = 165724, label = "Blood Bolt" },
+	{ id = 166570, label = "Snowball" },
 }
 
 -- The camera. Its distance and field of view decide how big a model looks; the mapping is measured
@@ -65,7 +95,15 @@ local cameraDistance = CAMERA_DISTANCE
 -- draw a streak right across the screen to the new spot.
 local WARP_PIXELS = 400
 
-local scene, actor
+-- Particle density. An actor has no control over how many particles a model lets go; it can only
+-- change their size. So density is done by layering copies of the same missile on the same spot:
+-- each copy lets go its own particles, and since spell particles add their light together, more
+-- copies give a fuller and brighter trail. Copies past the first are made only when asked for.
+local MAX_LAYERS = 5
+
+local scene
+local layers = {}
+local activeLayers = 0
 local calib
 local available = {}
 local loadedId
@@ -169,6 +207,7 @@ local function SetupCamera()
 	pcall(scene.SetCameraOrientationByAxisVectors, scene, -1, 0, 0, 0, 1, 0, 0, 0, 1)
 end
 
+
 local function NewActor()
 	local routes = {
 		{ name = "a bare actor", run = function() return scene:CreateActor() end },
@@ -178,18 +217,32 @@ local function NewActor()
 	for _, route in ipairs(routes) do
 		local ok, made = pcall(route.run)
 		if ok and made then
-			report["3d actor"] = "ok, " .. route.name
+			if not report["3d actor"] then report["3d actor"] = "ok, " .. route.name end
 			return made
 		end
 	end
-	report["3d actor"] = "this client would not create one"
+	if not report["3d actor"] then report["3d actor"] = "this client would not create one" end
 	return nil
 end
 
-local function LoadModel(id)
-	if not actor then return false end
-	local ok, success = pcall(actor.SetModelByFileID, actor, id)
-	return ok and success ~= false
+local function LoadInto(a, id)
+	local ok, success = pcall(a.SetModelByFileID, a, id)
+	if ok and success ~= false then
+		a.cbModel = id
+		return true
+	end
+	return false
+end
+
+-- Makes sure there are `n` actors, making more only as they are needed. Returns how many there
+-- are, which can be fewer if the client stops handing them out.
+local function EnsureLayers(n)
+	while #layers < n do
+		local a = NewActor()
+		if not a then break end
+		layers[#layers + 1] = a
+	end
+	return math.min(n, #layers)
 end
 
 function Models.Init()
@@ -209,24 +262,37 @@ function Models.Init()
 	scene:Hide()
 
 	SetupCamera()
-	actor = NewActor()
-	if not actor then
+	if EnsureLayers(1) < 1 then
 		report["3d effects"] = "unavailable, no actor"
 		return
 	end
+	report["3d effects"] = "ok"
+	report["3d models"] = "not checked yet, that happens the first time the spell effect is used"
+end
 
-	-- Every candidate is loaded once to see whether this client has it.
+-- Finds out which of the spell models this client has, by loading each one once into the first
+-- layer. Done the first time the effect is switched on or its options tab is opened, never at
+-- login: the effect is off by default, and most players would otherwise pay for thirty model loads
+-- they never see.
+local probed = false
+
+function Models.Probe()
+	if probed or #layers == 0 then return end
+	probed = true
 	available = {}
 	for _, entry in ipairs(ns.SPELL_MODELS) do
-		if LoadModel(entry.id) then available[#available + 1] = entry end
+		if LoadInto(layers[1], entry.id) then available[#available + 1] = entry end
 	end
+	layers[1].cbModel = nil
 	ns.SPELL_MODELS_AVAILABLE = available
 	report["3d models"] = #available .. "/" .. #ns.SPELL_MODELS .. " this client accepted"
-	report["3d effects"] = #available > 0 and "ok" or "no spell models on this client"
+	if #available == 0 then report["3d effects"] = "no spell models on this client" end
 	loadedId = nil
+	activeLayers = 0
 end
 
 function Models.Available()
+	Models.Probe()
 	return available
 end
 
@@ -242,16 +308,30 @@ local function WantedId()
 	return available[1] and available[1].id
 end
 
+-- Every active layer carries the model; the rest are emptied and hidden so they cost nothing.
+local function ReloadLayers()
+	for i, a in ipairs(layers) do
+		if i <= activeLayers then
+			LoadInto(a, loadedId)
+			pcall(a.Show, a)
+		else
+			pcall(a.ClearModel, a)
+			a.cbModel = nil
+			pcall(a.Hide, a)
+		end
+	end
+end
+
 function Models.Apply()
 	if not scene then return end
 	local db = ns.db
 	if not pcall(scene.SetFrameStrata, scene, db.strata) then scene:SetFrameStrata("TOOLTIP") end
 	scene:SetFrameLevel(205)
 
-	if not actor then return end
+	if #layers == 0 then return end
 
-	-- The actor stays at its own size; the camera moves to make it bigger or smaller, and a new
-	-- distance means a new mapping, so it is measured again on the next frame.
+	-- The actors stay at their own size; the camera moves to make the effect bigger or smaller,
+	-- and a new distance means a new mapping, so it is measured again on the next frame.
 	local size = math.max(0.01, db.model.size * (db.scale or 1))
 	local wanted = CAMERA_DISTANCE / size
 	if math.abs(wanted - cameraDistance) > 1e-6 then
@@ -259,11 +339,29 @@ function Models.Apply()
 		pcall(scene.SetCameraPosition, scene, cameraDistance, 0, 0)
 		calib = nil
 	end
-	pcall(actor.SetScale, actor, 1)
+
+	-- Nothing to load until the effect is wanted; the first time it is, find out what this client has.
+	if db.enabled and db.model.enabled then Models.Probe() end
+	if not probed then return end
+
+	local want = math.max(1, math.min(MAX_LAYERS, math.floor((db.model.density or 1) + 0.5)))
+	local have
+	if db.enabled and db.model.enabled then
+		-- Only worth saying the client fell short once more were actually asked for.
+		have = EnsureLayers(want)
+		report["3d layers"] = have < want
+			and string.format("%d of the %d asked for, the client would not make more", have, want)
+			or string.format("%d, up to %d", have, MAX_LAYERS)
+	else
+		have = math.min(want, #layers)
+	end
 
 	local id = WantedId()
-	if id and id ~= loadedId then
-		if LoadModel(id) then loadedId = id end
+	if (id and id ~= loadedId) or have ~= activeLayers then
+		loadedId = id
+		activeLayers = have
+		for _, a in ipairs(layers) do pcall(a.SetScale, a, 1) end
+		ReloadLayers()
 		hiddenSince = true
 	end
 	if not (db.enabled and db.model.enabled) then
@@ -278,14 +376,14 @@ end
 
 -- Points the missile along the way the cursor is going, so it flies rather than drifts. The
 -- missile models fly along their own x; yaw turns x within the camera's plane, pitch tilts it up.
-local function Aim(dx, dy)
+local function Aim(a, dx, dy)
 	if dx * dx + dy * dy < 1 then return end
 	local wx, wy, wz = calib.rx * dx + calib.ux * dy, calib.ry * dx + calib.uy * dy, calib.rz * dx + calib.uz * dy
 	local yaw = math.atan2 and math.atan2(wy, wx) or math.atan(wy, wx)
 	local flat = math.sqrt(wx * wx + wy * wy)
 	local pitch = -(math.atan2 and math.atan2(wz, flat) or math.atan(wz, flat))
-	pcall(actor.SetYaw, actor, yaw)
-	pcall(actor.SetPitch, actor, pitch)
+	pcall(a.SetYaw, a, yaw)
+	pcall(a.SetPitch, a, pitch)
 end
 
 -- sx, sy are screen pixels from the bottom left, with the lead already in them. `drawing` is
@@ -293,7 +391,7 @@ end
 function Models.Tick(elapsed, sx, sy, drawing, master)
 	if not scene then return end
 	local db = ns.db
-	if not (drawing and db.enabled and db.model.enabled and actor and loadedId) then
+	if not (drawing and db.enabled and db.model.enabled and activeLayers > 0 and loadedId) then
 		if scene:IsShown() then scene:Hide() end
 		hiddenSince = true
 		return
@@ -319,17 +417,22 @@ function Models.Tick(elapsed, sx, sy, drawing, master)
 	-- instead of drawing a streak from wherever it last was.
 	local warped = lastSX and ((sx - lastSX) ^ 2 + (sy - lastSY) ^ 2) > WARP_PIXELS * WARP_PIXELS
 	if hiddenSince or warped then
-		LoadModel(loadedId)
+		ReloadLayers()
 		hiddenSince = false
 	end
 
 	local wx, wy, wz = ScreenToWorld(sx, sy)
-	local okS, s = pcall(actor.GetScale, actor)
-	s = (okS and type(s) == "number" and s ~= 0) and s or 1
-	pcall(actor.SetPosition, actor, wx / s, wy / s, wz / s)
-	pcall(actor.SetAlpha, actor, db.model.alpha * (master or 1))
-
-	if db.model.aim and lastSX then Aim(sx - lastSX, sy - lastSY) end
+	local alpha = db.model.alpha * (master or 1)
+	local aim = db.model.aim and lastSX
+	for i = 1, activeLayers do
+		local a = layers[i]
+		-- Each actor's own scale, read live: a position is in the actor's units.
+		local okS, s = pcall(a.GetScale, a)
+		s = (okS and type(s) == "number" and s ~= 0) and s or 1
+		pcall(a.SetPosition, a, wx / s, wy / s, wz / s)
+		pcall(a.SetAlpha, a, alpha)
+		if aim then Aim(a, sx - lastSX, sy - lastSY) end
+	end
 	lastSX, lastSY = sx, sy
 
 	if not scene:IsShown() then scene:Show() end

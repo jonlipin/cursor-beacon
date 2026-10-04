@@ -87,10 +87,12 @@ BAD_TEMPLATES = BAD_TEMPLATES or {}
 PROJECTION_UNITS = PROJECTION_UNITS or "pixels"
 PROJECTION_TOP_ORIGIN = PROJECTION_TOP_ORIGIN or false
 NO_MODELSCENE = NO_MODELSCENE or false
--- What this pretend client has: everything but the Shadow Fireball.
-MODEL_FILES = { [166815] = true, [165569] = true, [166128] = true, [166214] = true, [166330] = true,
-  [166333] = true, [166497] = true, [166498] = true, [166374] = true, [167213] = true }
+-- What this pretend client has: every spell on the list but the Shadow Fireball and the Snowball.
+MODEL_DENY = { [382336] = true, [166570] = true }
+MODEL_FILES = setmetatable({}, { __index = function(_, id) return type(id) == "number" and not MODEL_DENY[id] end })
 MODEL_LOADS = 0
+-- A client that stops handing out actors after this many, to prove density copes with it.
+MAX_ACTORS = nil
 local function dot(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
 local function NewActor()
   local a = obj("Actor")
@@ -107,6 +109,7 @@ local function NewActor()
   rawset(a, "SetAlpha", function(self, v) self.actorAlpha = v end)
   rawset(a, "SetYaw", function(self, v) self.yaw = v end)
   rawset(a, "SetPitch", function(self, v) self.pitch = v end)
+  rawset(a, "ClearModel", function(self) self.model = nil end)
   return a
 end
 local function AddSceneMethods(f)
@@ -138,6 +141,7 @@ local function AddSceneMethods(f)
     return px, py, depth
   end)
   rawset(f, "CreateActor", function(self, name, template)
+    if MAX_ACTORS and #self.actors >= MAX_ACTORS then return nil end
     local a = NewActor()
     a.template = template
     self.actors[#self.actors + 1] = a
@@ -872,21 +876,38 @@ if NO_MODELSCENE then
   check("and nothing errors when the effect is switched on anyway", true)
   ns.db.model.enabled = false
   ns.Refresh()
+  local spellTab
+  for _, f in ipairs(FRAMES) do if f.kind == "Button" and f.text == "Spell effect" then spellTab = f end end
+  spellTab.scripts.OnClick(spellTab)
+  check("its options tab still opens, and explains", ns.report["page spell"] == "ok", ns.report["page spell"])
 else
   local scene = CursorBeaconModelScene
   check("the scene was built", scene ~= nil and ns.report["3d effects"] == "ok", ns.report["3d effects"])
   check("it covers the screen", scene.allPoints == true)
   check("it never takes a click", scene.mouseEnabled == false)
   check("a bare actor was enough", (ns.report["3d actor"] or ""):find("bare actor") ~= nil, ns.report["3d actor"])
-  check("models this client lacks are dropped", ns.report["3d models"] == "10/11 this client accepted", ns.report["3d models"])
   local actor = scene.actors[1]
-
   check("the effect is off to start with", not scene:IsShown())
+
+  -- The effect is off by default, so logging in must not load thirty spell models to find out
+  -- which ones this client has. That waits for first use.
+  check("no spell model is loaded at login", MODEL_LOADS == 0, MODEL_LOADS)
+  check("and the debug report says the check is still to come",
+    (ns.report["3d models"] or ""):find("not checked yet", 1, true) ~= nil, ns.report["3d models"])
+  check("the spell tab is not built until it is opened",
+    (ns.report["page spell"] or ""):find("waiting", 1, true) ~= nil, ns.report["page spell"])
 
   ns.db.lead = 0
   ns.db.model.enabled = true
   ns.Refresh()
+  local listed = #ns.SPELL_MODELS
+  check("switching it on runs the check", ns.report["3d models"] == (listed - 2) .. "/" .. listed .. " this client accepted",
+    ns.report["3d models"])
   check("switching it on loads the chosen spell", actor.model == ns.db.model.file, tostring(actor.model))
+  check("one copy by default", ns.report["3d layers"] == "1, up to 5", ns.report["3d layers"])
+  local probeLoads = MODEL_LOADS
+  ns.Refresh()
+  check("the check runs only once", MODEL_LOADS == probeLoads, MODEL_LOADS - probeLoads)
 
   -- Where the actor really is in the world, and where that lands on screen, in pixels from the
   -- bottom left whatever the projection itself answers in.
@@ -1048,12 +1069,77 @@ else
   ns.Models.ForgetCalibration()
   loop() loop()
 
-  -- The options list exactly what loaded, and the long list wraps onto more rows.
-  local spellLabels = 0
+  -- Opening the spell tab builds it, and it lists exactly what loaded.
+  local spellTab
+  for _, f in ipairs(FRAMES) do if f.kind == "Button" and f.text == "Spell effect" then spellTab = f end end
+  check("there is a Spell effect tab", spellTab ~= nil)
+  spellTab.scripts.OnClick(spellTab)
+  check("opening it builds it", ns.report["page spell"] == "ok", ns.report["page spell"])
+  local spellButtons, offered = {}, 0
   for _, f in ipairs(FRAMES) do
-    if f.kind == "Button" and f.cbValue and MODEL_FILES[f.cbValue] then spellLabels = spellLabels + 1 end
+    if f.kind == "Button" and f.cbValue and type(f.cbValue) == "number" and f.cbValue > 100000 then
+      spellButtons[#spellButtons + 1] = f
+      if MODEL_FILES[f.cbValue] then offered = offered + 1 end
+    end
   end
-  check("the options offer each spell this client has", spellLabels == 10, spellLabels)
+  check("it offers every spell this client has", offered == #ns.SPELL_MODELS - 2, offered)
+  check("and nothing it lacks", #spellButtons == offered, #spellButtons .. " buttons")
+  local rows = {}
+  for _, b in ipairs(spellButtons) do rows[b.point[3]] = true end
+  local rowCount = 0 for _ in pairs(rows) do rowCount = rowCount + 1 end
+  check("the long list wraps onto several rows", rowCount >= 4, rowCount .. " rows")
+  local widest = 0
+  for _, b in ipairs(spellButtons) do widest = math.max(widest, b.point[2] + b.w) end
+  check("and no row runs off the page", widest <= 464, widest)
+
+  -- Density layers copies of the missile on the same spot.
+  CURSOR = { W * 0.6, H * 0.4 } loop() loop()
+  ns.db.model.density = 3
+  ns.Refresh()
+  CURSOR = { W * 0.35, H * 0.65 } loop() loop()
+  check("density 3 makes three copies", #scene.actors >= 3 and ns.report["3d layers"] == "3, up to 5", ns.report["3d layers"])
+  local allHere, allSame = true, true
+  for i = 1, 3 do
+    local a = scene.actors[i]
+    if not a:IsShown() or a.model ~= ns.db.model.file then allSame = false end
+    local sc = a:GetScale()
+    local x, y, z = a:GetPosition()
+    local qx, qy = scene:Project3DPointTo2D(x * sc, y * sc, z * sc)
+    if math.abs(qx - W * 0.35) > 0.01 or math.abs(qy - H * 0.65) > 0.01 then allHere = false end
+  end
+  check("all three show the chosen spell", allSame)
+  check("all three sit exactly under the cursor", allHere)
+
+  ns.db.model.file = 165569
+  ns.Refresh()
+  local swapped = true
+  for i = 1, 3 do if scene.actors[i].model ~= 165569 then swapped = false end end
+  check("a new spell swaps every copy", swapped)
+
+  CURSOR = { W * 0.36, H * 0.65 } loop()
+  local loads = MODEL_LOADS
+  CURSOR = { 4, 4 } loop()
+  check("a warp starts every copy's ribbon fresh", MODEL_LOADS == loads + 3, MODEL_LOADS - loads)
+
+  ns.db.model.density = 1
+  ns.Refresh()
+  loop()
+  check("back to one copy hides and empties the others",
+    scene.actors[1]:IsShown() and not scene.actors[2]:IsShown() and scene.actors[2].model == nil
+    and not scene.actors[3]:IsShown() and scene.actors[3].model == nil)
+
+  -- A client that will not hand out as many actors as density asks for.
+  MAX_ACTORS = #scene.actors
+  ns.db.model.density = 5
+  ns.Refresh()
+  check("asking for more than the client gives says so",
+    (ns.report["3d layers"] or ""):find("of the 5 asked for", 1, true) ~= nil, ns.report["3d layers"])
+  loop()
+  check("and still draws what it has", scene:IsShown())
+  MAX_ACTORS = nil
+  ns.db.model.density = 1
+  ns.db.model.file = 166815
+  ns.Refresh()
 
   ns.db.model.enabled = false
   ns.db.lead = 100

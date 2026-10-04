@@ -1,12 +1,20 @@
-## 1.7.1
+## 1.8.0
 
-Fixed:
+Added:
 
-- **The spell effect would not go small enough.** Its size slider now reaches 5%, down from 20%,
-  and in steps of 1. More importantly, the whole effect now shrinks, not just the missile. Size
-  used to scale the missile model, but a spell's sparks and ribbon keep their own size when the
-  model is scaled, so a small missile still dragged a full sized trail behind it. Size now moves
-  the effect's own camera nearer or further instead, which shrinks or grows everything in the
-  effect evenly. That camera belongs to the small 3D view the effect is drawn in and holds nothing
-  but the spell; your view of the world is not touched. The effect still lines up exactly with the
-  cursor at every size, since it is measured again whenever the size changes.
+- **Over thirty spell effects to choose from**, up from eleven, grouped by school. Shadow: Shadow
+  Bolt, Death Coil, Haunt, Soul Shatter, Shadow Missile, Shadow Fireball. Fire: Fireball,
+  Pyroblast, Firebolt, Blue Fireball, Blue Pyroblast, Fel Fireball, Fel Pyroblast, Meteor. Frost
+  and water: Frostbolt, Ice, Ice Lance, Waterbolt. Arcane: Arcane Missiles, Arcane Barrage, Arcane
+  Shot, Spellsteal. Nature: Wrath, Lightning, Lightning Streak, Poison Shot. Holy: Holy, Penance.
+  And Blood Bolt and Snowball. Only the ones the client actually has are offered.
+- **Particle density.** A new slider layers up to five copies of the missile on the same spot.
+  Each copy lets go its own sparks, and spell sparks add their light together, so more copies give
+  a thicker, brighter trail. The game has no setting for how many particles a spell lets go, which
+  is why it is done this way. Each copy is one more model for the game to draw.
+
+Changed:
+
+- Nothing is loaded at login any more to find out which spells the client has. The effect is off
+  by default, so that check now waits until the effect is first switched on or its options tab is
+  first opened, and runs once.

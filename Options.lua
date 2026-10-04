@@ -639,6 +639,11 @@ local function BuildSpellPage(parent)
 		function() return math.floor(ns.db.model.alpha * 100 + 0.5) end,
 		function(v) ns.db.model.alpha = v / 100 end,
 		function(v) return v .. "%" end, nil, 24)
+	Slider(layout, "Particle density", 1, 5, 1,
+		function() return ns.db.model.density or 1 end,
+		function(v) ns.db.model.density = v end,
+		function(v) return v .. "x" end,
+		"Layers copies of the missile on the same spot. Each copy lets go its own sparks, and spell sparks add their light together, so more copies give a thicker, brighter trail. Each copy is another model for the game to draw.", 24)
 	Check(layout, "Point it the way the cursor is moving", "Turns the missile to fly along the cursor's path rather than drift beside it. Which way a model counts as forward is its own, so if a spell looks crooked, leave this off for it.",
 		function() return ns.db.model.aim end, function(v) ns.db.model.aim = v end, 24)
 	Note(layout, "It follows the same rules as everything else here: combat only, hiding while you turn the camera, fading when the mouse stops, and the Keep up slider on the Cursor tab.", nil, 2)
@@ -728,12 +733,22 @@ local PAGES = {
 	{ key = "hide", label = "Real cursor", build = BuildRealCursorPage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
 	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
-	{ key = "spell", label = "Spell effect", build = BuildSpellPage },
+	{ key = "spell", label = "Spell effect", build = BuildSpellPage, lazy = true },
 	{ key = "info", label = "Information", build = BuildInfoPage },
 	{ key = "about", label = "About", build = BuildAboutPage },
 }
 
 local function ShowPage(key)
+	-- A page marked lazy is built the first time it is opened, not with the rest. The spell
+	-- effect's page is one: building it means finding out which spell models this client has.
+	local target = pages[key]
+	if target and target.cbBuild then
+		local build = target.cbBuild
+		target.cbBuild = nil
+		local ok, err = pcall(build, target)
+		report["page " .. key] = ok and "ok" or ("failed: " .. tostring(err))
+	end
+
 	for _, entry in ipairs(PAGES) do
 		if pages[entry.key] then pages[entry.key]:SetShown(entry.key == key) end
 		local button = navButtons[entry.key]
@@ -796,8 +811,14 @@ local function BuildContent()
 		frame:SetSize(PANE_W, CONTENT_H - 50)
 		frame:Hide()
 		pages[entry.key] = frame
-		local ok, err = pcall(entry.build, frame)
-		report["page " .. entry.key] = ok and "ok" or ("failed: " .. tostring(err))
+		if entry.lazy then
+			-- Built the first time its tab is opened; see ShowPage.
+			frame.cbBuild = entry.build
+			report["page " .. entry.key] = "waiting until its tab is opened"
+		else
+			local ok, err = pcall(entry.build, frame)
+			report["page " .. entry.key] = ok and "ok" or ("failed: " .. tostring(err))
+		end
 	end
 
 	ShowPage("cursor")
