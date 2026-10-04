@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.6.2"
+ns.version = "1.7.0"
 ns.report = {}
 
 local report = ns.report
@@ -91,6 +91,16 @@ ns.defaults = {
 		color = { 0.25, 0.75, 1.0 },
 		alpha = 0.55,
 		fade = true,
+	},
+
+	-- A real 3D spell missile that follows the cursor and leaves its own trail. `file` is the
+	-- model's FileDataID; see ns.SPELL_MODELS in Models.lua.
+	model = {
+		enabled = false,
+		file = 166815,
+		size = 1.0,
+		alpha = 1.0,
+		aim = false,
 	},
 
 	activity = {
@@ -371,6 +381,7 @@ end
 function ns.Refresh()
 	MirrorToAccount()
 	if ns.Effects and ns.Effects.Apply then pcall(ns.Effects.Apply) end
+	if ns.Models and ns.Models.Apply then pcall(ns.Models.Apply) end
 	if ns.Info and ns.Info.Apply then pcall(ns.Info.Apply) end
 	if ns.UpdateMinimapButton then pcall(ns.UpdateMinimapButton) end
 end
@@ -395,6 +406,11 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if ns.Effects and ns.Effects.Init then
 			local ok, err = pcall(ns.Effects.Init)
 			report["effects"] = ok and "ok" or ("failed: " .. tostring(err))
+		end
+		-- Before the options, which list the spell models this client turned out to have.
+		if ns.Models and ns.Models.Init then
+			local ok, err = pcall(ns.Models.Init)
+			if not ok then report["3d effects"] = "failed: " .. tostring(err) end
 		end
 		if ns.Info and ns.Info.Init then
 			local ok, err = pcall(ns.Info.Init)

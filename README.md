@@ -40,6 +40,13 @@ things obvious at a glance.
 and the trail can taper and fade along its length. The smoothing is corrected for frame time, so it
 looks the same at 30 frames a second as at 144.
 
+**Spell effect.** A real 3D spell missile drawn by the game at the cursor: Shadow Bolt, Arcane
+Missiles, Fireball, Frostbolt, Ice, Wrath, Holy, Lightning or Shadow Fireball. It leaves its own
+trail, because the missile's ribbon and sparks stay where they were let go as it moves. It lines up
+with the cursor exactly at any resolution and UI scale: the addon asks the game where points land
+on screen and works the mapping out from that, rather than relying on a number tuned by hand for
+each model and screen size. Only the spells the client actually has are offered.
+
 **Activity sweep.** A cooldown style wedge around the cursor showing the global cooldown, the spell
 you are casting or channelling, or both.
 

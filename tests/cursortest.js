@@ -3,7 +3,7 @@ const fs = require('fs');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 const DIR = (process.argv.slice(2).find(a => !a.startsWith('--')) || 'C:/Users/jonli/cursor-beacon/');
 const L = lauxlib.luaL_newstate(); lualib.luaL_openlibs(L);
-const files = ['Core.lua', 'Effects.lua', 'Info.lua', 'Options.lua'];
+const files = ['Core.lua', 'Effects.lua', 'Models.lua', 'Info.lua', 'Options.lua'];
 
 const stub = String.raw`
 local VERBS = { "Set", "Get", "Is", "Create", "Register", "Enable", "Clear", "Hook", "Start", "Stop", "Has", "Num", "Add", "Unregister", "Disable", "Raise", "Lower", "Lock", "Unlock" }
@@ -48,6 +48,7 @@ local function obj(kind, template, name)
     if k == "SetPoint" then return function(s, ...) s.point = { ... } SETPOINTS = SETPOINTS + 1 end end
     if k == "ClearAllPoints" then return function(s) s.point = nil end end
     if k == "SetAllPoints" then return function(s) s.allPoints = true end end
+    if k == "EnableMouse" then return function(s, v) s.mouseEnabled = v end end
     if k == "SetTexture" then return function(s, x) s.texture = x end end
     if k == "GetTexture" then return function(s) return s.texture end end
     if k == "SetColorTexture" then return function(s, r, g, b, a) s.color = { r, g, b, a } end end
@@ -79,9 +80,76 @@ TEXTURES = {}
 FONTSTRINGS = {}
 SETPOINTS = 0
 BAD_TEMPLATES = BAD_TEMPLATES or {}
+-- A ModelScene that really projects. Its camera is placed with SetCameraPosition and the three axis
+-- vectors, it has a field of view, and it covers UIParent, so it knows its own size in pixels.
+-- PROJECTION_UNITS picks what Project3DPointTo2D answers in, and PROJECTION_TOP_ORIGIN whether it
+-- counts y from the top, so calibration can be shown to work out both for itself.
+PROJECTION_UNITS = PROJECTION_UNITS or "pixels"
+PROJECTION_TOP_ORIGIN = PROJECTION_TOP_ORIGIN or false
+NO_MODELSCENE = NO_MODELSCENE or false
+-- What this pretend client has: everything but the Shadow Fireball.
+MODEL_FILES = { [166815] = true, [165569] = true, [166128] = true, [166214] = true, [166330] = true,
+  [166333] = true, [166497] = true, [166498] = true, [166374] = true, [167213] = true }
+MODEL_LOADS = 0
+local function dot(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
+local function NewActor()
+  local a = obj("Actor")
+  a.pos = { 0, 0, 0 } a.actorScale = 1 a.model = nil
+  rawset(a, "SetModelByFileID", function(self, id)
+    MODEL_LOADS = MODEL_LOADS + 1
+    if MODEL_FILES[id] then self.model = id return true end
+    return false
+  end)
+  rawset(a, "SetPosition", function(self, x, y, z) self.pos = { x, y, z } end)
+  rawset(a, "GetPosition", function(self) return self.pos[1], self.pos[2], self.pos[3] end)
+  rawset(a, "SetScale", function(self, v) self.actorScale = v end)
+  rawset(a, "GetScale", function(self) return self.actorScale end)
+  rawset(a, "SetAlpha", function(self, v) self.actorAlpha = v end)
+  rawset(a, "SetYaw", function(self, v) self.yaw = v end)
+  rawset(a, "SetPitch", function(self, v) self.pitch = v end)
+  return a
+end
+local function AddSceneMethods(f)
+  f.cam = { pos = { 0, 0, 0 }, fwd = { -1, 0, 0 }, right = { 0, 1, 0 }, up = { 0, 0, 1 }, fov = 0.6 }
+  f.actors = {}
+  rawset(f, "GetWidth", function() return UIParent.w end)
+  rawset(f, "GetHeight", function() return UIParent.h end)
+  rawset(f, "GetEffectiveScale", function() return UIParent.scale or 1 end)
+  rawset(f, "SetCameraPosition", function(self, x, y, z) self.cam.pos = { x, y, z } end)
+  rawset(f, "SetCameraFieldOfView", function(self, v) self.cam.fov = v end)
+  rawset(f, "SetCameraOrientationByAxisVectors", function(self, fx, fy, fz, rx, ry, rz, ux, uy, uz)
+    self.cam.fwd, self.cam.right, self.cam.up = { fx, fy, fz }, { rx, ry, rz }, { ux, uy, uz }
+  end)
+  rawset(f, "GetCameraRight", function(self) local r = self.cam.right return r[1], r[2], r[3] end)
+  rawset(f, "GetCameraUp", function(self) local u = self.cam.up return u[1], u[2], u[3] end)
+  rawset(f, "Project3DPointTo2D", function(self, x, y, z)
+    local c = self.cam
+    local v = { x - c.pos[1], y - c.pos[2], z - c.pos[3] }
+    local depth = dot(v, c.fwd)
+    if depth <= 0 then return nil end
+    local es = self:GetEffectiveScale()
+    local wpx, hpx = self:GetWidth() * es, self:GetHeight() * es
+    local focal = (hpx / 2) / math.tan(c.fov / 2)
+    local px = wpx / 2 + dot(v, c.right) * focal / depth
+    local py = hpx / 2 + dot(v, c.up) * focal / depth
+    if PROJECTION_TOP_ORIGIN then py = hpx - py end
+    if PROJECTION_UNITS == "interface" then px, py = px / es, py / es
+    elseif PROJECTION_UNITS == "fraction" then px, py = px / wpx, py / hpx end
+    return px, py, depth
+  end)
+  rawset(f, "CreateActor", function(self, name, template)
+    local a = NewActor()
+    a.template = template
+    self.actors[#self.actors + 1] = a
+    return a
+  end)
+end
+
 function CreateFrame(kind, name, parent, template)
   if template and BAD_TEMPLATES[template] then error("Couldn't find inherited node " .. template) end
+  if kind == "ModelScene" and NO_MODELSCENE then error("Unknown frame type ModelScene") end
   local f = obj(kind, template, name)
+  if kind == "ModelScene" then AddSceneMethods(f) end
   f.parent = parent
   if template == "ButtonFrameTemplate" or template == "DefaultPanelFlatTemplate" or template == "DefaultPanelTemplate" then
     f.NineSlice = obj("Frame") f.TitleText = obj("fontstring") f.Inset = obj("Frame")
@@ -794,6 +862,167 @@ OPEN_REFUSED = false
 CursorBeaconWindow:Hide()
 HideUIPanel(SettingsPanel)
 
+-- 9d. The 3D spell effect
+if NO_MODELSCENE then
+  check("a client without ModelScene says so", (ns.report["3d effects"] or ""):find("no ModelScene") ~= nil,
+    ns.report["3d effects"])
+  ns.db.model.enabled = true
+  ns.Refresh()
+  loop() loop()
+  check("and nothing errors when the effect is switched on anyway", true)
+  ns.db.model.enabled = false
+  ns.Refresh()
+else
+  local scene = CursorBeaconModelScene
+  check("the scene was built", scene ~= nil and ns.report["3d effects"] == "ok", ns.report["3d effects"])
+  check("it covers the screen", scene.allPoints == true)
+  check("it never takes a click", scene.mouseEnabled == false)
+  check("a bare actor was enough", (ns.report["3d actor"] or ""):find("bare actor") ~= nil, ns.report["3d actor"])
+  check("models this client lacks are dropped", ns.report["3d models"] == "10/11 this client accepted", ns.report["3d models"])
+  local actor = scene.actors[1]
+
+  check("the effect is off to start with", not scene:IsShown())
+
+  ns.db.lead = 0
+  ns.db.model.enabled = true
+  ns.Refresh()
+  check("switching it on loads the chosen spell", actor.model == ns.db.model.file, tostring(actor.model))
+
+  -- Where the actor really is in the world, and where that lands on screen, in pixels from the
+  -- bottom left whatever the projection itself answers in.
+  local function ActorOnScreen()
+    local s = actor:GetScale()
+    local x, y, z = actor:GetPosition()
+    local px, py = scene:Project3DPointTo2D(x * s, y * s, z * s)
+    local es = scene:GetEffectiveScale()
+    if PROJECTION_UNITS == "interface" then px, py = px * es, py * es
+    elseif PROJECTION_UNITS == "fraction" then px, py = px * scene:GetWidth() * es, py * scene:GetHeight() * es end
+    if PROJECTION_TOP_ORIGIN then py = scene:GetHeight() * es - py end
+    return px, py
+  end
+
+  local es = UIParent.scale or 1
+  local W, H = UIParent.w * es, UIParent.h * es
+  local spots = { { W / 2, H / 2 }, { 1, 1 }, { W - 1, H - 1 }, { 37, H - 12 }, { W * 0.77, H * 0.31 } }
+  CURSOR = { spots[1][1], spots[1][2] }
+  loop() loop()
+  check("the scene calibrated", (ns.report["3d calibration"] or ""):sub(1, 2) == "ok", ns.report["3d calibration"])
+  check("and shows", scene:IsShown())
+
+  local worst = 0
+  for _, p in ipairs(spots) do
+    CURSOR = { p[1], p[2] }
+    loop() loop()
+    local px, py = ActorOnScreen()
+    worst = math.max(worst, math.abs(px - p[1]), math.abs(py - p[2]))
+  end
+  check("the spell sits exactly under the cursor, centre to corners", worst < 0.01, worst .. " px off at worst")
+
+  -- An actor's position is in its own units: Blizzard multiplies it by the scale to get the world.
+  ns.db.model.size = 2.5
+  ns.Refresh()
+  CURSOR = { W * 0.2, H * 0.8 }
+  loop() loop()
+  check("the actor took the new size", math.abs(actor:GetScale() - 2.5) < 1e-9, actor:GetScale())
+  local px, py = ActorOnScreen()
+  check("and still sits under the cursor, its position divided by its scale",
+    math.abs(px - W * 0.2) < 0.01 and math.abs(py - H * 0.8) < 0.01, px .. "," .. py)
+  ns.db.model.size = 1
+  ns.Refresh()
+
+  -- A warp across the screen reloads the model, so its ribbon starts fresh rather than streaking.
+  CURSOR = { W * 0.5, H * 0.5 } loop() loop()
+  local loads = MODEL_LOADS
+  CURSOR = { W * 0.52, H * 0.5 } loop()
+  check("ordinary movement does not reload the model", MODEL_LOADS == loads, MODEL_LOADS - loads)
+  CURSOR = { 5, 5 } loop()
+  check("a warp does", MODEL_LOADS == loads + 1, MODEL_LOADS - loads)
+
+  -- Hidden by the shared rules, and the ribbon starts fresh when it comes back.
+  MOUSELOOK = true loop()
+  check("turning the camera hides the spell too", not scene:IsShown())
+  loads = MODEL_LOADS
+  MOUSELOOK = false loop()
+  check("and it comes back with a fresh ribbon", scene:IsShown() and MODEL_LOADS == loads + 1)
+
+  -- The opacity follows the master opacity and the idle fade.
+  ns.db.model.alpha = 0.5
+  ns.db.alpha = 0.8
+  loop()
+  check("opacity is the spell's times the overall", math.abs((actor.actorAlpha or 0) - 0.4) < 1e-9, actor.actorAlpha)
+  ns.db.model.alpha, ns.db.alpha = 1, 1
+
+  -- Picking another spell swaps the model; a spell this client lacks falls back to one it has.
+  ns.db.model.file = 165569
+  ns.Refresh()
+  check("choosing Arcane Missiles loads it", actor.model == 165569, tostring(actor.model))
+  ns.db.model.file = 382336
+  ns.Refresh()
+  check("a spell this client lacks falls back to one it has", actor.model ~= nil and MODEL_FILES[actor.model], tostring(actor.model))
+  ns.db.model.file = 166815
+  ns.Refresh()
+
+  -- Pointing along the motion, and a screen that changes size underneath it.
+  ns.db.model.aim = true
+  CURSOR = { W * 0.3, H * 0.3 } loop()
+  CURSOR = { W * 0.4, H * 0.3 } loop()
+  check("aiming turns the actor", actor.yaw ~= nil)
+  ns.db.model.aim = false
+  local oldW = UIParent.w
+  UIParent.w = UIParent.w * 1.25
+  W = UIParent.w * es
+  CURSOR = { W * 0.9, H * 0.5 }
+  loop() loop()
+  px, py = ActorOnScreen()
+  check("a wider screen is measured again and still lines up",
+    math.abs(px - W * 0.9) < 0.01 and math.abs(py - H * 0.5) < 0.01, px .. "," .. py)
+  UIParent.w = oldW
+
+  -- Every way the projection could answer: in pixels, in interface units, or as fractions of the
+  -- scene, counting y from the bottom or from the top. A UI scale of 0.8 makes pixels and
+  -- interface units tell apart; at exactly 1 they are the same numbers. The same screen, 1920 by
+  -- 1080 pixels, is 2400 by 1350 interface units at that scale.
+  UIParent.scale, UIParent.w, UIParent.h = 0.8, 2400, 1350
+  es = 0.8
+  W, H = 1920, 1080
+  local expect = { pixels = "pixels", interface = "interface units", fraction = "fractions of the scene" }
+  for _, units in ipairs({ "pixels", "interface", "fraction" }) do
+    for _, top in ipairs({ false, true }) do
+      PROJECTION_UNITS, PROJECTION_TOP_ORIGIN = units, top
+      ns.Models.ForgetCalibration()
+      local label = units .. (top and ", from the top" or "")
+      CURSOR = { W * 0.5, H * 0.5 } loop() loop()
+      local rep = ns.report["3d calibration"] or ""
+      check("calibration reads " .. label, rep:find(expect[units], 1, true) ~= nil
+        and (rep:find("from the top", 1, true) ~= nil) == top, rep)
+      local worstHere = 0
+      for _, p in ipairs({ { 1, 1 }, { W - 1, H - 1 }, { W * 0.13, H * 0.9 } }) do
+        CURSOR = { p[1], p[2] } loop() loop()
+        local qx, qy = ActorOnScreen()
+        worstHere = math.max(worstHere, math.abs(qx - p[1]), math.abs(qy - p[2]))
+      end
+      check("and lines up exactly at a UI scale of 0.8 (" .. label .. ")", worstHere < 0.01, worstHere .. " px")
+    end
+  end
+  PROJECTION_UNITS, PROJECTION_TOP_ORIGIN = "pixels", false
+  UIParent.scale, UIParent.w, UIParent.h = 1, 1920, 1080
+  ns.Models.ForgetCalibration()
+  loop() loop()
+
+  -- The options list exactly what loaded, and the long list wraps onto more rows.
+  local spellLabels = 0
+  for _, f in ipairs(FRAMES) do
+    if f.kind == "Button" and f.cbValue and MODEL_FILES[f.cbValue] then spellLabels = spellLabels + 1 end
+  end
+  check("the options offer each spell this client has", spellLabels == 10, spellLabels)
+
+  ns.db.model.enabled = false
+  ns.db.lead = 100
+  ns.Refresh()
+  loop()
+  check("switching it off hides the scene", not scene:IsShown())
+end
+
 -- 10. Options widgets
 local checks, sliders, choiceButtons = 0, 0, 0
 for _, f in ipairs(FRAMES) do
@@ -905,6 +1134,8 @@ lua.lua_setglobal(L, to_luastring('FILES'));
 const pre = (process.argv.includes('--bare')
   ? 'BARE=true\nBAD_TEMPLATES={UICheckButtonTemplate=true,ChatConfigCheckButtonTemplate=true,MinimalSliderTemplate=true,UISliderTemplate=true,OptionsSliderTemplate=true,UIPanelButtonTemplate=true,UIPanelCloseButton=true,CooldownFrameTemplate=true,DefaultPanelFlatTemplate=true,DefaultPanelTemplate=true,ButtonFrameTemplate=true,BasicFrameTemplate=true,BackdropTemplate=true}\n'
   : '') + (process.argv.includes('--verbose') ? 'VERBOSE=true\n' : '')
-  + (process.argv.includes('--noart') ? 'NO_POINTER_ART=true\n' : '');
+  + (process.argv.includes('--noart') ? 'NO_POINTER_ART=true\n' : '')
+  + (process.argv.includes('--nomathatan2') ? 'WOW_HAS_MATH_ATAN2=false\n' : '')
+  + (process.argv.includes('--nomodelscene') ? 'NO_MODELSCENE=true\n' : '');
 run(pre + stub, 'stub');
 run(driver, 'driver');

@@ -398,6 +398,7 @@ function Effects.OnUpdate(_, elapsed)
 
 	if not ShouldDraw() then
 		overlay:Hide()
+		if ns.Models and ns.Models.Tick then ns.Models.Tick(elapsed, 0, 0, false) end
 		-- Park the trail on the cursor so it does not whip across the screen when it comes back.
 		for i = 1, MAX_TRAIL do trail[i].x, trail[i].y = x, y end
 		return
@@ -414,6 +415,14 @@ function Effects.OnUpdate(_, elapsed)
 		idleFor = 0
 	end
 	local master = (db.alpha or 1) * fade
+
+	-- The 3D spell effect works in screen pixels, which is what the scene projects into, so the
+	-- led position is taken back out of interface units.
+	if ns.Models and ns.Models.Tick then
+		local uiScale = UIParent:GetEffectiveScale()
+		if not uiScale or uiScale == 0 then uiScale = 1 end
+		ns.Models.Tick(elapsed, lx * uiScale, ly * uiScale, true, master)
+	end
 
 	-- Hover growth, checked a few times a second rather than every frame.
 	hoverCheck = hoverCheck + elapsed

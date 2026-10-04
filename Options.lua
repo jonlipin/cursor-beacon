@@ -332,8 +332,11 @@ local function Choice(layout, label, options, get, set, tooltip, indent)
 	caption:SetPoint("TOPLEFT", 0, 0)
 	caption:SetText(label)
 
+	-- Buttons run left to right and wrap onto another row when the next one would not fit, so a
+	-- long list of choices grows downwards instead of off the side of the page.
+	local width = PANE_W - (indent or 0)
 	local buttons = {}
-	local x = 0
+	local x, rowY = 0, -20
 	for index, option in ipairs(options) do
 		local button
 		local ok, made = pcall(CreateFrame, "Button", nil, holder, "UIPanelButtonTemplate")
@@ -349,7 +352,10 @@ local function Choice(layout, label, options, get, set, tooltip, indent)
 		button:SetText(option.label)
 		local textWidth = button:GetFontString() and button:GetFontString():GetStringWidth() or 40
 		button:SetWidth(math.max(44, textWidth + 18))
-		button:SetPoint("TOPLEFT", x, -20)
+		if x > 0 and x + button:GetWidth() > width then
+			x, rowY = 0, rowY - 25
+		end
+		button:SetPoint("TOPLEFT", x, rowY)
 		x = x + button:GetWidth() + 4
 		button.cbValue = option.value
 		button:SetScript("OnClick", function(self)
@@ -361,7 +367,9 @@ local function Choice(layout, label, options, get, set, tooltip, indent)
 		buttons[index] = button
 	end
 
-	Place(layout, holder, 46, indent)
+	local height = -rowY + 21 + 5
+	holder:SetHeight(height)
+	Place(layout, holder, height, indent)
 	widgets[#widgets + 1] = { refresh = function()
 		local current = get()
 		for _, button in ipairs(buttons) do
@@ -601,6 +609,40 @@ local function BuildTrailPage(parent)
 		function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, 24)
 end
 
+local function BuildSpellPage(parent)
+	local layout = NewLayout(parent)
+
+	Header(layout, "Spell effect")
+	local available = ns.Models and ns.Models.Available and ns.Models.Available() or {}
+	if #available == 0 then
+		Note(layout, "This client could not load any of the spell models, so there is nothing to show here. /cursor debug says why.", nil, 2)
+		return
+	end
+	Note(layout, "A real 3D spell missile, drawn by the game itself, that follows the cursor. It leaves its own trail: the missile's ribbon and sparks stay where they were let go, the same way the spell streaks across the world when it is cast.", nil, 4)
+
+	Check(layout, "Draw a spell effect at the cursor", "Uses the game's own spell models, so it looks exactly like the spell does in the world.",
+		function() return ns.db.model.enabled end, function(v) ns.db.model.enabled = v end)
+
+	local choices = {}
+	for _, entry in ipairs(available) do
+		choices[#choices + 1] = { value = entry.id, label = entry.label }
+	end
+	Choice(layout, "Spell", choices,
+		function() return ns.db.model.file end, function(v) ns.db.model.file = v end, nil, 24)
+
+	Slider(layout, "Size", 20, 400, 5,
+		function() return math.floor(ns.db.model.size * 100 + 0.5) end,
+		function(v) ns.db.model.size = v / 100 end,
+		function(v) return v .. "%" end, "Also follows the overall size on the Cursor tab.", 24)
+	Slider(layout, "Opacity", 10, 100, 5,
+		function() return math.floor(ns.db.model.alpha * 100 + 0.5) end,
+		function(v) ns.db.model.alpha = v / 100 end,
+		function(v) return v .. "%" end, nil, 24)
+	Check(layout, "Point it the way the cursor is moving", "Turns the missile to fly along the cursor's path rather than drift beside it. Which way a model counts as forward is its own, so if a spell looks crooked, leave this off for it.",
+		function() return ns.db.model.aim end, function(v) ns.db.model.aim = v end, 24)
+	Note(layout, "It follows the same rules as everything else here: combat only, hiding while you turn the camera, fading when the mouse stops, and the Keep up slider on the Cursor tab.", nil, 2)
+end
+
 local function BuildInfoPage(parent)
 	local layout = NewLayout(parent)
 
@@ -685,6 +727,7 @@ local PAGES = {
 	{ key = "hide", label = "Real cursor", build = BuildRealCursorPage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
 	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
+	{ key = "spell", label = "Spell effect", build = BuildSpellPage },
 	{ key = "info", label = "Information", build = BuildInfoPage },
 	{ key = "about", label = "About", build = BuildAboutPage },
 }

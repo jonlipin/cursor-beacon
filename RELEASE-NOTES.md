@@ -1,13 +1,22 @@
-## 1.6.2
+## 1.7.0
 
-Fixed:
+Added:
 
-- **The minimap button did not open the options.** It only worked if the game's options window was
-  already open, put there by something else, though closing always worked. Asking the game to go to
-  a category navigates to it but does not open the window, and with the window shut that quietly
-  does nothing and reports no error, so the addon believed it had worked and never tried anything
-  else. The window is now opened first and then navigated, the category is asked for by its id
-  rather than by itself, and each route is judged on whether the page actually ended up on screen
-  instead of on whether the call raised an error. Four routes are tried in turn before falling back
-  to the addon's own window, and `/cursor debug` names the one that worked.
-- A failed attempt no longer leaves the game's options window hanging open on some other page.
+- **Spell effect tab: a real 3D spell missile that follows the cursor.** Pick Shadow Bolt, Arcane
+  Missiles, Fireball, Frostbolt, Ice, Wrath, Holy, Lightning or Shadow Fireball, and the game draws
+  that spell's own missile model at the cursor. It leaves its own trail, because the missile's
+  ribbon and sparks stay where they were let go as it moves, the same way the spell streaks across
+  the world when it is cast. Size, opacity, and an option to point the missile the way the cursor
+  is moving. It follows the same rules as everything else: combat only, hiding while you turn the
+  camera, fading when the mouse stops, and the Keep up slider.
+- The effect lines up with the cursor exactly, at any resolution and UI scale, and the same for
+  every spell. Older cursor addons that draw spell models do it with a number tuned by hand for
+  each model and each screen size; this one asks the game where points land on screen and works
+  the mapping out from that, measuring again whenever the screen or the UI scale changes.
+- Only the spells this client actually has are offered. `/cursor debug` lists how many it
+  accepted, how the 3D scene was set up and what the measurement found.
+
+Changed:
+
+- A row of choice buttons in the options now wraps onto another line when it runs out of room,
+  instead of running off the side of the page.
