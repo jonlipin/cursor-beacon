@@ -1,13 +1,12 @@
-## 1.8.1
+## 1.9.0
 
-Fixed:
+Changed:
 
-- **The activity sweep showed as a small dot that grew over a cast, whatever its size was set
-  to.** It is meant to be a wedge sweeping round the cursor. The widget it is built on comes from a
-  game template that pins itself to every edge of whatever holds it, and since 1.3.0 what holds it
-  has been a one pixel frame at the cursor. So the sweep was one pixel's worth of frame and its
-  size setting did nothing; early in a cast only a sliver of that was filled, and by the end most
-  of it, which looked like a dot growing. It now drops those inherited edges and takes the size it
-  is given.
-- If you turned the sweep's size up trying to make it bigger, it will now really be that size.
-  The default is 56 pixels.
+- **The activity ring moved to the Information tab.** It tells you something, your global cooldown
+  and what you are casting, the same as the readout beside the cursor, so the two now sit
+  together. The tab it used to share with the trail is now just called Trail.
+- To make room, the Information tab is laid out more tightly: "Only while in combat" and "Dark
+  backing behind the text" share a row, and the list of things to show is in three columns
+  instead of two. The hint about `/cursor test` is now in the tooltip on the activity ring's Show
+  buttons.
+- Nothing about how either one behaves has changed, and your settings carry over as they are.

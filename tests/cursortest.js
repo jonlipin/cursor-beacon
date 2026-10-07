@@ -1156,6 +1156,34 @@ else
   check("switching it off hides the scene", not scene:IsShown())
 end
 
+-- 9e. Where things live in the options, and that every page fits.
+local function TextFrame(text)
+  for _, fs in ipairs(FONTSTRINGS) do if fs.text == text then return fs end end
+end
+local readoutHeader, activityHeader = TextFrame("Cursor readout"), TextFrame("Activity ring")
+check("the activity ring is on the Information tab, with the readout",
+  readoutHeader and activityHeader and readoutHeader.parent == activityHeader.parent)
+local trailHeader = TextFrame("Trail")
+check("and no longer on the Trail tab", trailHeader and trailHeader.parent ~= activityHeader.parent)
+local columns = {}
+for _, field in ipairs(ns.INFO_FIELDS) do
+  local fs = TextFrame(field.label)
+  if fs and fs.parent and fs.parent.point then columns[fs.parent.point[4]] = true end
+end
+local columnCount = 0 for _ in pairs(columns) do columnCount = columnCount + 1 end
+check("the readout fields sit in three columns", columnCount == 3, columnCount)
+
+-- Every page that has been built keeps its controls inside the page.
+local pagesChecked, overflow = 0, nil
+for _, f in ipairs(FRAMES) do
+  if f.cbLayout then
+    pagesChecked = pagesChecked + 1
+    if f.cbLayout.y > f.h then overflow = (overflow or "") .. string.format(" %d of %d", f.cbLayout.y, f.h) end
+  end
+end
+check("the pages were found", pagesChecked >= 8, pagesChecked)
+check("no options page runs off the bottom", overflow == nil, overflow)
+
 -- 10. Options widgets
 local checks, sliders, choiceButtons = 0, 0, 0
 for _, f in ipairs(FRAMES) do

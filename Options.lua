@@ -110,8 +110,11 @@ end
 -- Layout helper: a simple top down flow inside one page.
 -- ------------------------------------------------------------------
 
+-- The layout is kept on its page so the test harness can check that no page runs off the bottom.
 local function NewLayout(parent)
-	return { parent = parent, y = 4 }
+	local layout = { parent = parent, y = 4 }
+	parent.cbLayout = layout
+	return layout
 end
 
 local function Place(layout, region, height, indent)
@@ -589,24 +592,6 @@ local function BuildTrailPage(parent)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.DOT_TEXTURES, "dot")),
 		function() return ns.db.trail.texture end, function(v) ns.db.trail.texture = v end, nil, 24)
 
-	Header(layout, "Activity ring")
-	Choice(layout, "Show", {
-		{ value = "off", label = "Off" },
-		{ value = "gcd", label = "Cooldown" },
-		{ value = "cast", label = "Casting" },
-		{ value = "both", label = "Both" },
-	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
-		"Sweeps a wedge around the cursor for the global cooldown, for what you are casting, or for both.")
-	Note(layout, "Type /cursor test to run the sweep for four seconds without waiting for a cast.", nil, 2)
-	Slider(layout, "Size", 16, 400, 2,
-		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
-		function(v) return v .. "px" end, nil, 24)
-	Slider(layout, "Opacity", 5, 100, 5,
-		function() return math.floor(ns.db.activity.alpha * 100 + 0.5) end,
-		function(v) ns.db.activity.alpha = v / 100 end,
-		function(v) return v .. "%" end, nil, 24)
-	Color(layout, "Sweep colour", function() return ns.db.activity.color end,
-		function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, 24)
 end
 
 local function BuildSpellPage(parent)
@@ -655,10 +640,13 @@ local function BuildInfoPage(parent)
 	Header(layout, "Cursor readout")
 	Check(layout, "Show information next to the cursor", nil,
 		function() return ns.db.info.enabled end, function(v) ns.db.info.enabled = v end)
+	-- Side by side, to leave room on this tab for the activity ring below.
+	local rowY = layout.y
 	Check(layout, "Only while in combat", nil,
 		function() return ns.db.info.combatOnly end, function(v) ns.db.info.combatOnly = v end, 24)
+	layout.y = rowY
 	Check(layout, "Dark backing behind the text", nil,
-		function() return ns.db.info.background end, function(v) ns.db.info.background = v end, 24)
+		function() return ns.db.info.background end, function(v) ns.db.info.background = v end, PANE_W / 2)
 	Slider(layout, "Text size", 8, 24, 1,
 		function() return ns.db.info.fontSize end, function(v) ns.db.info.fontSize = v end,
 		nil, nil, 24)
@@ -672,28 +660,52 @@ local function BuildInfoPage(parent)
 	Header(layout, "What to show")
 	-- A live line rather than a fixed one: whether the unit numbers can be read is only known
 	-- once the character is in the world, which is after this page is built.
-	local status = Note(layout, " ", nil, 3)
+	local status = Note(layout, " ", nil, 2)
 	widgets[#widgets + 1] = { refresh = function()
 		if not ns.db.info.enabled then
 			status:SetText("The readout is switched off above, so none of these will show.")
 		elseif ns.NumbersReadable and not ns.NumbersReadable() then
-			status:SetText("This client will not let an addon read health or power, so those three are drawn as bars instead of percentages. Target name and the rest are plain text.")
+			status:SetText("This client will not let addons read health or power, so those three show as bars.")
 		else
-			status:SetText("Health and power are drawn as bars, with a percentage on them where the client allows it.")
+			status:SetText("Health and power show as bars, with a percentage where the client allows it.")
 		end
 	end }
 
-	-- Two columns of checkboxes so the list stays on one screen.
+	-- Three columns of checkboxes, filled top to bottom, so the list takes three rows.
 	local startY = layout.y
-	local half = math.ceil(#ns.INFO_FIELDS / 2)
+	local perColumn = math.ceil(#ns.INFO_FIELDS / 3)
+	local deepest = startY
 	for index, field in ipairs(ns.INFO_FIELDS) do
 		local key = field.key
-		if index == half + 1 then layout.y = startY end
+		local column = math.floor((index - 1) / perColumn)
+		if (index - 1) % perColumn == 0 then layout.y = startY end
 		Check(layout, field.label, nil,
 			function() return ns.db.info.fields[key] end,
 			function(v) ns.db.info.fields[key] = v end,
-			index > half and (PANE_W / 2) or 0)
+			column * PANE_W / 3)
+		deepest = math.max(deepest, layout.y)
 	end
+	layout.y = deepest
+
+	-- The activity ring sits here rather than with the trail: like the readout, it tells you
+	-- something, where the trail is only there to be seen.
+	Header(layout, "Activity ring")
+	Choice(layout, "Show", {
+		{ value = "off", label = "Off" },
+		{ value = "gcd", label = "Cooldown" },
+		{ value = "cast", label = "Casting" },
+		{ value = "both", label = "Both" },
+	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
+		"Sweeps a wedge around the cursor for the global cooldown, for what you are casting, or for both. Type /cursor test to run it for four seconds without waiting for a cast.")
+	Slider(layout, "Size", 16, 400, 2,
+		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
+		function(v) return v .. "px" end, nil, 24)
+	Slider(layout, "Opacity", 5, 100, 5,
+		function() return math.floor(ns.db.activity.alpha * 100 + 0.5) end,
+		function(v) ns.db.activity.alpha = v / 100 end,
+		function(v) return v .. "%" end, nil, 24)
+	Color(layout, "Sweep colour", function() return ns.db.activity.color end,
+		function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, 24)
 end
 
 local function BuildAboutPage(parent)
@@ -732,7 +744,7 @@ local PAGES = {
 	{ key = "pointer", label = "Big pointer", build = BuildPointerPage },
 	{ key = "hide", label = "Real cursor", build = BuildRealCursorPage },
 	{ key = "ring", label = "Ring and dot", build = BuildRingPage },
-	{ key = "trail", label = "Trail and sweep", build = BuildTrailPage },
+	{ key = "trail", label = "Trail", build = BuildTrailPage },
 	{ key = "spell", label = "Spell effect", build = BuildSpellPage, lazy = true },
 	{ key = "info", label = "Information", build = BuildInfoPage },
 	{ key = "about", label = "About", build = BuildAboutPage },
