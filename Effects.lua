@@ -138,6 +138,11 @@ function Effects.Init()
 	local ok, cd = pcall(CreateFrame, "Cooldown", "CursorBeaconActivity", anchor, "CooldownFrameTemplate")
 	if ok and cd then
 		activity = cd
+		-- CooldownFrameTemplate is setAllPoints: it pins itself to every edge of its parent, which
+		-- here is the 1 by 1 anchor. Left like that the sweep is the anchor's size and SetSize does
+		-- nothing, so it showed as a dot that grew over a cast. Clearing the inherited points first
+		-- lets it be the size it is given.
+		activity:ClearAllPoints()
 		activity:SetPoint("CENTER", anchor, "CENTER", 0, 0)
 		activity:SetHideCountdownNumbers(true)
 		-- A bare Cooldown has no art of its own. Without a swipe texture it runs its timer and

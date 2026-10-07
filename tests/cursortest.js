@@ -46,7 +46,7 @@ local function obj(kind, template, name)
     if k == "SetScale" then return function(s, v) s.scale = v end end
     if k == "GetScale" or k == "GetEffectiveScale" then return function(s) return s.scale or 1 end end
     if k == "SetPoint" then return function(s, ...) s.point = { ... } SETPOINTS = SETPOINTS + 1 end end
-    if k == "ClearAllPoints" then return function(s) s.point = nil end end
+    if k == "ClearAllPoints" then return function(s) s.point = nil s.allPoints = nil end end
     if k == "SetAllPoints" then return function(s) s.allPoints = true end end
     if k == "EnableMouse" then return function(s, v) s.mouseEnabled = v end end
     if k == "SetTexture" then return function(s, x) s.texture = x end end
@@ -154,6 +154,9 @@ function CreateFrame(kind, name, parent, template)
   if kind == "ModelScene" and NO_MODELSCENE then error("Unknown frame type ModelScene") end
   local f = obj(kind, template, name)
   if kind == "ModelScene" then AddSceneMethods(f) end
+  -- The client's CooldownFrameTemplate is setAllPoints="true" (Blizzard_FrameXMLUtil/Mainline/Cooldown.xml):
+  -- a frame made from it starts pinned to every edge of its parent.
+  if template == "CooldownFrameTemplate" then f.allPoints = true end
   f.parent = parent
   if template == "ButtonFrameTemplate" or template == "DefaultPanelFlatTemplate" or template == "DefaultPanelTemplate" then
     f.NineSlice = obj("Frame") f.TitleText = obj("fontstring") f.Inset = obj("Frame")
@@ -516,6 +519,11 @@ else
   -- it was invisible before 1.4.0.
   if CursorBeaconActivity then
   check("the sweep has art to draw with", CursorBeaconActivity.swipeTexture ~= nil)
+  -- Its template pins it to every edge of its parent, the 1 by 1 anchor; left pinned, it is that size and
+  -- SetSize does nothing, which showed in game as a dot that grew over a cast.
+  check("the sweep is not left pinned to the 1 by 1 anchor", not CursorBeaconActivity.allPoints)
+  check("so it takes the size it is given", CursorBeaconActivity.w == ns.db.activity.size * (ns.db.scale or 1),
+    tostring(CursorBeaconActivity.w))
   ns.db.activity.mode = "off"
   loop(0.1)
   check("nothing is sweeping to start with", not CursorBeaconActivity:IsShown())
