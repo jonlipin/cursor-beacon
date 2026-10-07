@@ -519,6 +519,20 @@ else
   -- it was invisible before 1.4.0.
   if CursorBeaconActivity then
   check("the sweep has art to draw with", CursorBeaconActivity.swipeTexture ~= nil)
+  -- The sweep reveals its texture like a clock hand, so the texture is its shape. A plain white
+  -- square made it a solid square pie (seen in game, 400 pixels of yellow block), cut in 8 pixel
+  -- steps because that texture is 8 by 8. It takes the ring's shape instead.
+  check("the sweep takes the ring's shape", CursorBeaconActivity.swipeTexture == ns.db.ring.texture,
+    tostring(CursorBeaconActivity.swipeTexture))
+  check("which by default is a ring, not a square", not tostring(CursorBeaconActivity.swipeTexture):find("WHITE8X8"),
+    tostring(CursorBeaconActivity.swipeTexture))
+  local oldShape = ns.db.ring.texture
+  ns.db.ring.texture = "Interface\\Cooldown\\starburst"
+  ns.Refresh()
+  check("a new ring shape reshapes the sweep too", CursorBeaconActivity.swipeTexture == "Interface\\Cooldown\\starburst",
+    tostring(CursorBeaconActivity.swipeTexture))
+  ns.db.ring.texture = oldShape
+  ns.Refresh()
   -- Its template pins it to every edge of its parent, the 1 by 1 anchor; left pinned, it is that size and
   -- SetSize does nothing, which showed in game as a dot that grew over a cast.
   check("the sweep is not left pinned to the 1 by 1 anchor", not CursorBeaconActivity.allPoints)

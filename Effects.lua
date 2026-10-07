@@ -147,8 +147,10 @@ function Effects.Init()
 		activity:SetHideCountdownNumbers(true)
 		-- A bare Cooldown has no art of its own. Without a swipe texture it runs its timer and
 		-- draws nothing at all, which is exactly what it looked like before this was set.
+		-- The sweep reveals its texture like a clock hand, so the texture decides its shape. Apply
+		-- gives it the ring's shape; this first one only proves the call works on this client.
 		local textured = activity.SetSwipeTexture
-			and pcall(activity.SetSwipeTexture, activity, "Interface\\Buttons\\WHITE8X8")
+			and pcall(activity.SetSwipeTexture, activity, "Interface\\Cooldown\\ping4")
 		if activity.SetDrawSwipe then pcall(activity.SetDrawSwipe, activity, true) end
 		if activity.SetDrawEdge then pcall(activity.SetDrawEdge, activity, false) end
 		if activity.SetDrawBling then pcall(activity.SetDrawBling, activity, false) end
@@ -257,6 +259,12 @@ function Effects.Apply()
 	if activity then
 		local a = db.activity
 		activity:SetSize(a.size * s, a.size * s)
+		-- The sweep takes the cursor ring's shape, so with the default it really is a ring that
+		-- fills round the cursor. It used to be a plain white square: a solid square pie, its edge
+		-- cut in 8 pixel steps because that texture is only 8 by 8.
+		if activity.SetSwipeTexture then
+			pcall(activity.SetSwipeTexture, activity, db.ring.texture)
+		end
 		if activity.SetSwipeColor then
 			pcall(activity.SetSwipeColor, activity, a.color[1], a.color[2], a.color[3], a.alpha)
 		end
