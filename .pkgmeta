@@ -2,6 +2,7 @@ package-as: CursorBeacon
 
 ignore:
   - tests
+  - tools
 
 manual-changelog:
   filename: RELEASE-NOTES.md

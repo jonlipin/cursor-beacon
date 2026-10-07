@@ -1,10 +1,13 @@
-## 1.9.1
+## 1.9.2
 
 Fixed:
 
-- **The activity ring was a solid square block, not a ring.** The sweep reveals its picture like a
-  clock hand, so the picture decides its shape, and it had been given a plain white square. That
-  drew a square pie that filled with each cast, with a jagged edge in big steps because the square
-  was only 8 pixels across, stretched. It now uses the same shape as the cursor ring (a ring, by
-  default), so it is a ring that fills round the cursor, with a smooth edge. Pick a different
-  shape on the Ring and dot tab and the activity ring follows it.
+- **The activity ring drew a black square behind itself.** The game's own ring pictures are glows
+  on black, made to be added on top of what is behind them, and the sweep can only lay a picture
+  over the screen, so the black showed. The addon now ships its own ring: plain white with a clear
+  middle and clear corners, so the sweep colour tints it to any colour you like and nothing is
+  drawn around it. It no longer follows the cursor ring's shape, which 1.9.1 tried; none of those
+  shapes suit a sweep.
+
+**After updating, quit the game and start it again** rather than just reloading the interface. The
+ring is a new file, and the game only notices new files when it starts.

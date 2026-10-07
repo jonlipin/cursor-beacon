@@ -519,19 +519,19 @@ else
   -- it was invisible before 1.4.0.
   if CursorBeaconActivity then
   check("the sweep has art to draw with", CursorBeaconActivity.swipeTexture ~= nil)
-  -- The sweep reveals its texture like a clock hand, so the texture is its shape. A plain white
-  -- square made it a solid square pie (seen in game, 400 pixels of yellow block), cut in 8 pixel
-  -- steps because that texture is 8 by 8. It takes the ring's shape instead.
-  check("the sweep takes the ring's shape", CursorBeaconActivity.swipeTexture == ns.db.ring.texture,
-    tostring(CursorBeaconActivity.swipeTexture))
-  check("which by default is a ring, not a square", not tostring(CursorBeaconActivity.swipeTexture):find("WHITE8X8"),
-    tostring(CursorBeaconActivity.swipeTexture))
-  local oldShape = ns.db.ring.texture
+  -- The sweep reveals its texture like a clock hand, so the texture is its shape. Seen in game: a
+  -- plain white square made a solid square pie; the game's ring art (additive glow on black) made a
+  -- ring on a black square, since a sweep cannot blend additively. It has its own white ring.
+  local swipe = tostring(CursorBeaconActivity.swipeTexture)
+  check("the sweep uses the addon's own ring", swipe == "Interface\\AddOns\\CursorBeacon\\Media\\ActivityRing", swipe)
+  check("not the white square", not swipe:find("WHITE8X8"), swipe)
+  check("nor the game's glow art", not swipe:find("Cooldown"), swipe)
   ns.db.ring.texture = "Interface\\Cooldown\\starburst"
   ns.Refresh()
-  check("a new ring shape reshapes the sweep too", CursorBeaconActivity.swipeTexture == "Interface\\Cooldown\\starburst",
+  check("and changing the cursor ring's shape leaves it alone",
+    tostring(CursorBeaconActivity.swipeTexture) == "Interface\\AddOns\\CursorBeacon\\Media\\ActivityRing",
     tostring(CursorBeaconActivity.swipeTexture))
-  ns.db.ring.texture = oldShape
+  ns.db.ring.texture = "Interface\\Cooldown\\ping4"
   ns.Refresh()
   -- Its template pins it to every edge of its parent, the 1 by 1 anchor; left pinned, it is that size and
   -- SetSize does nothing, which showed in game as a dot that grew over a cast.
@@ -1312,5 +1312,23 @@ const pre = (process.argv.includes('--bare')
   + (process.argv.includes('--noart') ? 'NO_POINTER_ART=true\n' : '')
   + (process.argv.includes('--nomathatan2') ? 'WOW_HAS_MATH_ATAN2=false\n' : '')
   + (process.argv.includes('--nomodelscene') ? 'NO_MODELSCENE=true\n' : '');
+// The sweep's own ring is a file the Lua above can only name, so it is checked here: it ships in the
+// repository, is a power of two, every pixel is white (so the sweep colour alone decides the
+// colour), the middle and the corners are clear, and the band itself is solid.
+(function checkRingFile() {
+  const path = require('path');
+  const file = path.join(__dirname, '..', 'Media', 'ActivityRing.tga');
+  const fail = msg => { console.log('FAIL: activity ring file: ' + msg); process.exit(1); };
+  if (!fs.existsSync(file)) fail('missing at ' + file);
+  const b = fs.readFileSync(file);
+  if (b[2] !== 2 || b[16] !== 32 || (b[17] & 0x0f) !== 8) fail('not a 32 bit TGA with an 8 bit alpha channel');
+  const w = b.readUInt16LE(12), h = b.readUInt16LE(14);
+  if (w !== h || (w & (w - 1)) !== 0) fail('not square and a power of two: ' + w + 'x' + h);
+  const at = (x, y) => 18 + (y * w + x) * 4;
+  for (let i = 18; i < b.length; i += 4) if (b[i] !== 255 || b[i + 1] !== 255 || b[i + 2] !== 255) fail('a pixel is not white');
+  if (b[at(w >> 1, h >> 1) + 3] !== 0 || b[at(0, 0) + 3] !== 0) fail('the middle or a corner is not clear');
+  if (b[at(w >> 1, Math.round(h * 0.03)) + 3] !== 255) fail('the band is not solid');
+})();
+
 run(pre + stub, 'stub');
 run(driver, 'driver');

@@ -531,8 +531,7 @@ local function BuildRingPage(parent)
 	Check(layout, "Show the ring", nil,
 		function() return ns.db.ring.enabled end, function(v) ns.db.ring.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.RING_TEXTURES, "ring")),
-		function() return ns.db.ring.texture end, function(v) ns.db.ring.texture = v end,
-		"The activity ring on the Information tab takes this shape too.", 24)
+		function() return ns.db.ring.texture end, function(v) ns.db.ring.texture = v end, nil, 24)
 	Slider(layout, "Size", 8, 320, 2,
 		function() return ns.db.ring.size end, function(v) ns.db.ring.size = v end,
 		function(v) return v .. "px" end, nil, 24)
@@ -697,7 +696,7 @@ local function BuildInfoPage(parent)
 		{ value = "cast", label = "Casting" },
 		{ value = "both", label = "Both" },
 	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
-		"Fills a ring around the cursor for the global cooldown, for what you are casting, or for both. It takes the shape chosen for the ring on the Ring and dot tab. Type /cursor test to run it for four seconds without waiting for a cast.")
+		"Fills a ring around the cursor for the global cooldown, for what you are casting, or for both. Type /cursor test to run it for four seconds without waiting for a cast.")
 	Slider(layout, "Size", 16, 400, 2,
 		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
 		function(v) return v .. "px" end, nil, 24)
