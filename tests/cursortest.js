@@ -522,16 +522,49 @@ else
   -- The sweep reveals its texture like a clock hand, so the texture is its shape. Seen in game: a
   -- plain white square made a solid square pie; the game's ring art (additive glow on black) made a
   -- ring on a black square, since a sweep cannot blend additively. It has its own white ring.
-  local swipe = tostring(CursorBeaconActivity.swipeTexture)
-  check("the sweep uses the addon's own ring", swipe == "Interface\\AddOns\\CursorBeacon\\Media\\ActivityRing", swipe)
-  check("not the white square", not swipe:find("WHITE8X8"), swipe)
-  check("nor the game's glow art", not swipe:find("Cooldown"), swipe)
+  local RING = "Interface\\AddOns\\CursorBeacon\\Media\\Ring\\Ring"
+  local function Swipe() return tostring(CursorBeaconActivity.swipeTexture) end
+  check("the sweep uses one of the addon's own rings", Swipe():sub(1, #RING) == RING, Swipe())
+  check("not the white square", not Swipe():find("WHITE8X8"), Swipe())
+  check("nor the game's glow art", not Swipe():find("Cooldown"), Swipe())
   ns.db.ring.texture = "Interface\\Cooldown\\starburst"
   ns.Refresh()
-  check("and changing the cursor ring's shape leaves it alone",
-    tostring(CursorBeaconActivity.swipeTexture) == "Interface\\AddOns\\CursorBeacon\\Media\\ActivityRing",
-    tostring(CursorBeaconActivity.swipeTexture))
+  check("and changing the cursor ring's shape leaves it alone", Swipe():sub(1, #RING) == RING, Swipe())
   ns.db.ring.texture = "Interface\\Cooldown\\ping4"
+  ns.Refresh()
+
+  -- Thickness picks the nearest ring file: a sweep's band can only change by changing its texture.
+  check("the default is a 40px ring", ns.defaults.activity.size == 40, ns.defaults.activity.size)
+  check("3px thick", ns.defaults.activity.thickness == 3, ns.defaults.activity.thickness)
+  check("in a soft white, not a strong colour", ns.defaults.activity.color[1] > 0.85 and ns.defaults.activity.color[3] > 0.8
+    and ns.defaults.activity.alpha <= 0.6)
+  local a = ns.db.activity
+  a.size, a.thickness = 40, 3
+  ns.Refresh()
+  check("40px across and 3px thick picks the 15% band", Swipe() == RING .. "015", Swipe())
+  a.size, a.thickness = 400, 1
+  ns.Refresh()
+  check("a hairline on a big ring picks the thinnest file", Swipe() == RING .. "002", Swipe())
+  a.size, a.thickness = 40, 40
+  ns.Refresh()
+  check("a band past the radius fills in to a disc", Swipe() == RING .. "100", Swipe())
+  a.size, a.thickness = 100, 12
+  ns.Refresh()
+  -- 12px on a 100px ring is 24.8% of its 48.4px outer radius: nearer 27 than 20 by ratio.
+  check("in between picks the nearest band by ratio", Swipe() == RING .. "027", Swipe())
+  for _, band in ipairs(ns.RING_BANDS) do
+    local path = ns.RingTexture(100, 100 / 2 * (124 / 128) * band / 100)
+    if path ~= RING .. string.format("%03d", band) then check("every band can be reached: " .. band, false, path) end
+  end
+  check("every band can be reached", true)
+  local swaps = 0
+  local real = CursorBeaconActivity.SetSwipeTexture
+  rawset(CursorBeaconActivity, "SetSwipeTexture", function(s, t) swaps = swaps + 1 return real(s, t) end)
+  ns.Refresh() ns.Refresh()
+  check("an unchanged ring is not handed to the game again", swaps == 0, swaps)
+  rawset(CursorBeaconActivity, "SetSwipeTexture", nil)
+  check("the debug report names the band", (ns.report["activity ring"] or ""):find("27%%") ~= nil, ns.report["activity ring"])
+  a.size, a.thickness = 40, 3
   ns.Refresh()
   -- Its template pins it to every edge of its parent, the 1 by 1 anchor; left pinned, it is that size and
   -- SetSize does nothing, which showed in game as a dot that grew over a cast.
@@ -1198,6 +1231,44 @@ end
 check("the pages were found", pagesChecked >= 8, pagesChecked)
 check("no options page runs off the bottom", overflow == nil, overflow)
 
+-- Two colour swatches with one name is confusing (the activity ring's was briefly "Ring colour",
+-- the same as the cursor ring's, on another tab).
+local swatchNames, dupe = {}, nil
+for _, fs in ipairs(FONTSTRINGS) do
+  local owner = fs.parent
+  if owner and owner.kind == "Button" and owner.h == 22 and fs.text then
+    if swatchNames[fs.text] then dupe = fs.text end
+    swatchNames[fs.text] = true
+  end
+end
+check("no two colour swatches share a name", dupe == nil, dupe)
+
+-- Size and Thickness share a row, as do the readout's two offsets.
+local function SliderHolder(minV, maxV)
+  for _, f in ipairs(FRAMES) do
+    if f.kind == "Slider" and f.minV == minV and f.maxV == maxV then return f.parent end
+  end
+end
+local sizeRow, thickRow = SliderHolder(16, 400), SliderHolder(1, 60)
+check("the ring's size and thickness share a row", sizeRow and thickRow and sizeRow.point[5] == thickRow.point[5]
+  and sizeRow.point[4] < thickRow.point[4])
+
+-- Default look puts the ring back to its defaults but leaves what it shows alone.
+local act = ns.db.activity
+act.size, act.thickness, act.alpha, act.color, act.mode = 400, 20, 1, { 1, 0.85, 0.25 }, "both"
+local defaultButton
+for _, f in ipairs(FRAMES) do if f.kind == "Button" and f.text == "Default look" then defaultButton = f end end
+check("there is a Default look button", defaultButton ~= nil)
+defaultButton.scripts.OnClick(defaultButton)
+local d = ns.defaults.activity
+check("Default look restores the size, thickness and opacity",
+  act.size == d.size and act.thickness == d.thickness and act.alpha == d.alpha, act.size .. "/" .. act.thickness .. "/" .. act.alpha)
+check("and the colour", act.color[1] == d.color[1] and act.color[2] == d.color[2] and act.color[3] == d.color[3])
+check("as a copy, so changing it later cannot change the defaults", act.color ~= d.color)
+check("but leaves what it shows alone", act.mode == "both", act.mode)
+act.mode = "off"
+ns.Refresh()
+
 -- 10. Options widgets
 local checks, sliders, choiceButtons = 0, 0, 0
 for _, f in ipairs(FRAMES) do
@@ -1312,22 +1383,42 @@ const pre = (process.argv.includes('--bare')
   + (process.argv.includes('--noart') ? 'NO_POINTER_ART=true\n' : '')
   + (process.argv.includes('--nomathatan2') ? 'WOW_HAS_MATH_ATAN2=false\n' : '')
   + (process.argv.includes('--nomodelscene') ? 'NO_MODELSCENE=true\n' : '');
-// The sweep's own ring is a file the Lua above can only name, so it is checked here: it ships in the
-// repository, is a power of two, every pixel is white (so the sweep colour alone decides the
-// colour), the middle and the corners are clear, and the band itself is solid.
-(function checkRingFile() {
+// The sweep's rings are files the Lua above can only name, so they are checked here. The band list
+// in Effects.lua and the one in the tool that makes the files must agree; every band must have its
+// file in the repository; and each file must be a power of two, white in every pixel (so the sweep
+// colour alone decides the colour), clear in the corners, and have the band its name says,
+// measured from the pixels.
+(function checkRingFiles() {
   const path = require('path');
-  const file = path.join(__dirname, '..', 'Media', 'ActivityRing.tga');
-  const fail = msg => { console.log('FAIL: activity ring file: ' + msg); process.exit(1); };
-  if (!fs.existsSync(file)) fail('missing at ' + file);
-  const b = fs.readFileSync(file);
-  if (b[2] !== 2 || b[16] !== 32 || (b[17] & 0x0f) !== 8) fail('not a 32 bit TGA with an 8 bit alpha channel');
-  const w = b.readUInt16LE(12), h = b.readUInt16LE(14);
-  if (w !== h || (w & (w - 1)) !== 0) fail('not square and a power of two: ' + w + 'x' + h);
-  const at = (x, y) => 18 + (y * w + x) * 4;
-  for (let i = 18; i < b.length; i += 4) if (b[i] !== 255 || b[i + 1] !== 255 || b[i + 2] !== 255) fail('a pixel is not white');
-  if (b[at(w >> 1, h >> 1) + 3] !== 0 || b[at(0, 0) + 3] !== 0) fail('the middle or a corner is not clear');
-  if (b[at(w >> 1, Math.round(h * 0.03)) + 3] !== 255) fail('the band is not solid');
+  const repo = path.join(__dirname, '..');
+  const fail = msg => { console.log('FAIL: activity ring files: ' + msg); process.exit(1); };
+  const luaList = /ns\.RING_BANDS = \{([^}]*)\}/.exec(fs.readFileSync(path.join(repo, 'Effects.lua'), 'utf8'));
+  const toolList = /const BANDS = \[([^\]]*)\]/.exec(fs.readFileSync(path.join(repo, 'tools', 'make-ring.js'), 'utf8'));
+  if (!luaList || !toolList) fail('could not read the band lists');
+  const bands = luaList[1].split(',').map(Number);
+  if (bands.join() !== toolList[1].split(',').map(Number).join()) fail('Effects.lua and tools/make-ring.js list different bands');
+  for (const band of bands) {
+    const file = path.join(repo, 'Media', 'Ring', 'Ring' + String(band).padStart(3, '0') + '.tga');
+    if (!fs.existsSync(file)) fail('missing ' + file);
+    const b = fs.readFileSync(file);
+    if (b[2] !== 2 || b[16] !== 32 || (b[17] & 0x0f) !== 8) fail(band + ': not a 32 bit TGA with an 8 bit alpha channel');
+    const w = b.readUInt16LE(12), h = b.readUInt16LE(14);
+    if (w !== h || (w & (w - 1)) !== 0) fail(band + ': not square and a power of two');
+    const alpha = (x, y) => b[18 + (y * w + x) * 4 + 3];
+    for (let i = 18; i < b.length; i += 4) if (b[i] !== 255 || b[i + 1] !== 255 || b[i + 2] !== 255) fail(band + ': a pixel is not white');
+    if (alpha(0, 0) !== 0) fail(band + ': a corner is not clear');
+    // Walk down the middle column from the top: where the band starts, and where it ends.
+    const x = w >> 1;
+    let outer = -1, inner = h >> 1;
+    for (let y = 0; y <= h >> 1; y++) {
+      if (outer < 0 && alpha(x, y) >= 128) outer = y;
+      else if (outer >= 0 && alpha(x, y) < 128) { inner = y; break; }
+    }
+    if (outer < 0) fail(band + ': no band found');
+    const measured = 100 * (inner - outer) / (124 * w / 256);
+    if (Math.abs(measured - band) > Math.max(1.5, band * 0.08)) fail(band + ': the band measures ' + measured.toFixed(1) + '%');
+    if (band < 100 && alpha(x, h >> 1) !== 0) fail(band + ': the middle is not clear');
+  }
 })();
 
 run(pre + stub, 'stub');

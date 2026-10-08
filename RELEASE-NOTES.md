@@ -1,13 +1,21 @@
-## 1.9.2
+## 1.10.0
 
-Fixed:
+Added:
 
-- **The activity ring drew a black square behind itself.** The game's own ring pictures are glows
-  on black, made to be added on top of what is behind them, and the sweep can only lay a picture
-  over the screen, so the black showed. The addon now ships its own ring: plain white with a clear
-  middle and clear corners, so the sweep colour tints it to any colour you like and nothing is
-  drawn around it. It no longer follows the cursor ring's shape, which 1.9.1 tried; none of those
-  shapes suit a sweep.
+- **A thickness slider for the activity ring**, from a hairline to a solid disc. The ring's shape
+  comes from a picture, so the addon ships thirteen rings of different thickness and uses the one
+  nearest what you ask for, given the ring's size.
+- **A Default look button** on the activity ring. Changing the defaults never changes settings you
+  have already saved, so this is how to get the new look below without resetting everything else.
+  It leaves what the ring shows for (Cooldown, Casting, Both) alone.
+
+Changed:
+
+- **A gentler default look for the activity ring**: 40 pixels across instead of 56, 3 pixels thick,
+  in a soft, slightly warm white at half opacity, instead of a bold gold.
+- The Information tab is tidier: the readout's two offsets share a row, and so do the ring's size
+  and thickness, and its opacity and colour. The ring's colour is now just called Colour, so it is
+  not confused with the cursor ring's on the Ring and dot tab.
 
 **After updating, quit the game and start it again** rather than just reloading the interface. The
-ring is a new file, and the game only notices new files when it starts.
+rings are new files, and the game only notices new files when it starts.

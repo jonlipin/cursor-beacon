@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.9.2"
+ns.version = "1.10.0"
 ns.report = {}
 
 local report = ns.report
@@ -106,11 +106,14 @@ ns.defaults = {
 		density = 1,
 	},
 
+	-- The default look is meant to be easy on the eyes: a thin ring in a soft, slightly warm white
+	-- at half opacity, rather than a bright solid colour.
 	activity = {
 		mode = "off", -- off | gcd | cast | both
-		size = 56,
-		color = { 1.0, 0.85, 0.25 },
-		alpha = 0.65,
+		size = 40,
+		thickness = 3, -- the band, in pixels; the nearest ring file is used (Effects.lua)
+		color = { 0.93, 0.92, 0.88 },
+		alpha = 0.5,
 		channelColor = { 0.45, 0.9, 0.45 },
 	},
 

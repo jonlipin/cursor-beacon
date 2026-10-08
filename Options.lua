@@ -187,10 +187,12 @@ end
 
 local SLIDER_TEMPLATES = { "MinimalSliderTemplate", "UISliderTemplate", "OptionsSliderTemplate" }
 
-local function Slider(layout, label, minV, maxV, step, get, set, format, tooltip, indent)
+-- `width` is optional; give it to put two sliders side by side (see SideBySide).
+local function Slider(layout, label, minV, maxV, step, get, set, format, tooltip, indent, width)
 	local name = NextName("Slider")
 	local holder = CreateFrame("Frame", nil, layout.parent)
-	holder:SetSize(PANE_W - (indent or 0), 40)
+	width = width or (PANE_W - (indent or 0))
+	holder:SetSize(width, 40)
 
 	local caption = holder:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	caption:SetPoint("TOPLEFT", 0, 0)
@@ -219,7 +221,7 @@ local function Slider(layout, label, minV, maxV, step, get, set, format, tooltip
 	end
 
 	slider:SetPoint("TOPLEFT", 2, -18)
-	slider:SetSize(PANE_W - (indent or 0) - 6, 18)
+	slider:SetSize(width - 6, 18)
 	slider:SetMinMaxValues(minV, maxV)
 	if slider.SetValueStep then slider:SetValueStep(step) end
 	if slider.SetObeyStepOnDrag then pcall(slider.SetObeyStepOnDrag, slider, true) end
@@ -288,9 +290,9 @@ local function OpenColorPicker(r, g, b, apply)
 	return ok
 end
 
-local function Color(layout, label, get, set, tooltip, indent)
+local function Color(layout, label, get, set, tooltip, indent, width)
 	local button = CreateFrame("Button", nil, layout.parent)
-	button:SetSize(PANE_W - (indent or 0), 22)
+	button:SetSize(width or (PANE_W - (indent or 0)), 22)
 
 	local swatch = button:CreateTexture(nil, "ARTWORK")
 	swatch:SetSize(18, 18)
@@ -391,6 +393,18 @@ end
 -- ------------------------------------------------------------------
 -- Pages
 -- ------------------------------------------------------------------
+
+-- Two controls on one row, each given its own indent and width. The row is as tall as the taller
+-- of the two, so a slider beside a colour swatch still leaves the next row in the right place.
+local function SideBySide(layout, left, right)
+	local half = (PANE_W - 24) / 2
+	local top = layout.y
+	left(24, half - 12)
+	local leftBottom = layout.y
+	layout.y = top
+	right(24 + half, half - 12)
+	layout.y = math.max(leftBottom, layout.y)
+end
 
 local function TextureOptions(list)
 	local out = {}
@@ -650,12 +664,17 @@ local function BuildInfoPage(parent)
 	Slider(layout, "Text size", 8, 24, 1,
 		function() return ns.db.info.fontSize end, function(v) ns.db.info.fontSize = v end,
 		nil, nil, 24)
-	Slider(layout, "Sideways offset", -200, 200, 2,
-		function() return ns.db.info.offsetX end, function(v) ns.db.info.offsetX = v end,
-		function(v) return v .. "px" end, nil, 24)
-	Slider(layout, "Vertical offset", -200, 200, 2,
-		function() return ns.db.info.offsetY end, function(v) ns.db.info.offsetY = v end,
-		function(v) return v .. "px" end, nil, 24)
+	SideBySide(layout,
+		function(indent, width)
+			Slider(layout, "Sideways offset", -200, 200, 2,
+				function() return ns.db.info.offsetX end, function(v) ns.db.info.offsetX = v end,
+				function(v) return v .. "px" end, nil, indent, width)
+		end,
+		function(indent, width)
+			Slider(layout, "Vertical offset", -200, 200, 2,
+				function() return ns.db.info.offsetY end, function(v) ns.db.info.offsetY = v end,
+				function(v) return v .. "px" end, nil, indent, width)
+		end)
 
 	Header(layout, "What to show")
 	-- A live line rather than a fixed one: whether the unit numbers can be read is only known
@@ -689,7 +708,26 @@ local function BuildInfoPage(parent)
 
 	-- The activity ring sits here rather than with the trail: like the readout, it tells you
 	-- something, where the trail is only there to be seen.
+	local headerY = layout.y
 	Header(layout, "Activity ring")
+
+	-- Saved settings keep their values when the defaults change, so this is the way to the
+	-- default look without resetting every other setting too. What it shows is left alone.
+	local okD, made = pcall(CreateFrame, "Button", nil, layout.parent, "UIPanelButtonTemplate")
+	local defaultLook = (okD and made) or CreateFrame("Button", nil, layout.parent)
+	defaultLook:SetSize(104, 20)
+	defaultLook:SetPoint("TOPRIGHT", layout.parent, "TOPRIGHT", 0, -headerY + 2)
+	defaultLook:SetText("Default look")
+	defaultLook:SetScript("OnClick", function()
+		local d, a = ns.defaults.activity, ns.db.activity
+		a.size, a.thickness, a.alpha = d.size, d.thickness, d.alpha
+		a.color = { d.color[1], d.color[2], d.color[3] }
+		ns.Refresh()
+		ns.SyncOptions()
+		ns.Print("activity ring set back to its default look.")
+	end)
+	Tooltip(defaultLook, "Default look", "Puts the ring's size, thickness, colour and opacity back to their defaults. Whether it shows, and for what, is left as it is.")
+
 	Choice(layout, "Show", {
 		{ value = "off", label = "Off" },
 		{ value = "gcd", label = "Cooldown" },
@@ -697,15 +735,32 @@ local function BuildInfoPage(parent)
 		{ value = "both", label = "Both" },
 	}, function() return ns.db.activity.mode end, function(v) ns.db.activity.mode = v end,
 		"Fills a ring around the cursor for the global cooldown, for what you are casting, or for both. Type /cursor test to run it for four seconds without waiting for a cast.")
-	Slider(layout, "Size", 16, 400, 2,
-		function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
-		function(v) return v .. "px" end, nil, 24)
-	Slider(layout, "Opacity", 5, 100, 5,
-		function() return math.floor(ns.db.activity.alpha * 100 + 0.5) end,
-		function(v) ns.db.activity.alpha = v / 100 end,
-		function(v) return v .. "%" end, nil, 24)
-	Color(layout, "Sweep colour", function() return ns.db.activity.color end,
-		function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, 24)
+	SideBySide(layout,
+		function(indent, width)
+			Slider(layout, "Size", 16, 400, 2,
+				function() return ns.db.activity.size end, function(v) ns.db.activity.size = v end,
+				function(v) return v .. "px" end, nil, indent, width)
+		end,
+		function(indent, width)
+			Slider(layout, "Thickness", 1, 60, 1,
+				function() return ns.db.activity.thickness or 3 end,
+				function(v) ns.db.activity.thickness = v end,
+				function(v) return v .. "px" end,
+				"How wide the ring's band is. Past half the size it fills in to a solid disc.", indent, width)
+		end)
+	SideBySide(layout,
+		function(indent, width)
+			Slider(layout, "Opacity", 5, 100, 5,
+				function() return math.floor(ns.db.activity.alpha * 100 + 0.5) end,
+				function(v) ns.db.activity.alpha = v / 100 end,
+				function(v) return v .. "%" end, nil, indent, width)
+		end,
+		function(indent, width)
+			-- Down a little, level with the slider bar beside it rather than its caption.
+			layout.y = layout.y + 12
+			Color(layout, "Colour", function() return ns.db.activity.color end,
+				function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, indent, width)
+		end)
 end
 
 local function BuildAboutPage(parent)

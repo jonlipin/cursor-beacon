@@ -15,9 +15,29 @@ local MAX_TRAIL = 20
 local GCD_SPELL = 61304 -- the hidden global cooldown spell
 local LEAD_CAP = 90 -- most pixels of lead allowed in one frame, so a warp does not fling the art
 
--- The activity sweep's own ring, shipped with the addon (made by tools/make-ring.js). No extension:
--- the client finds the file itself. Built from the folder name so a renamed folder still works.
-ns.ACTIVITY_RING = "Interface\\AddOns\\" .. ADDON .. "\\Media\\ActivityRing"
+-- The activity sweep's own rings, shipped in Media/Ring and made by tools/make-ring.js. A sweep's
+-- shape is its texture, so a thinner or thicker band is a different file: one per band, named by
+-- the band as a percent of the ring's outer radius (Ring100 is a solid disc). Keep this list in
+-- step with BANDS in the tool. No extension on the path: the client finds the file itself. Built
+-- from the folder name so a renamed folder still works.
+ns.RING_BANDS = { 2, 3, 4, 6, 8, 11, 15, 20, 27, 36, 48, 65, 100 }
+local RING_PATH = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Ring\\Ring"
+-- In the files the ring's outer edge sits 124 pixels out of a 128 pixel half width.
+local RING_REACH = 124 / 128
+
+-- The ring file nearest a ring `size` across with a band `thickness` wide, both in the same units.
+-- Nearest by ratio rather than by difference, so the thin bands, which are close together in
+-- percent, are still told apart. Returns the path and the band percent it chose.
+function ns.RingTexture(size, thickness)
+	local radius = math.max(size, 1) / 2 * RING_REACH
+	local want = math.max(0.01, 100 * thickness / radius)
+	local best, bestErr
+	for _, band in ipairs(ns.RING_BANDS) do
+		local err = math.abs(math.log(band) - math.log(want))
+		if not bestErr or err < bestErr then best, bestErr = band, err end
+	end
+	return RING_PATH .. string.format("%03d", best), best
+end
 
 local overlay, anchor, driver, ring, dot, activity, pointer, pointerShadow
 local trail = {}
@@ -157,7 +177,7 @@ function Effects.Init()
 		-- cannot blend: it drew a black square behind the ring. Before that it was a plain white
 		-- square, which drew a solid square pie.
 		local textured = activity.SetSwipeTexture
-			and pcall(activity.SetSwipeTexture, activity, ns.ACTIVITY_RING)
+			and pcall(activity.SetSwipeTexture, activity, (ns.RingTexture(40, 3)))
 		if activity.SetDrawSwipe then pcall(activity.SetDrawSwipe, activity, true) end
 		if activity.SetDrawEdge then pcall(activity.SetDrawEdge, activity, false) end
 		if activity.SetDrawBling then pcall(activity.SetDrawBling, activity, false) end
@@ -266,6 +286,14 @@ function Effects.Apply()
 	if activity then
 		local a = db.activity
 		activity:SetSize(a.size * s, a.size * s)
+		-- The band comes from picking the ring file nearest the thickness asked for. The overall
+		-- size scales both the ring and its band, so it drops out of the ratio.
+		local ring, band = ns.RingTexture(a.size, a.thickness or 3)
+		if ring ~= activity.cbRing and activity.SetSwipeTexture then
+			if pcall(activity.SetSwipeTexture, activity, ring) then activity.cbRing = ring end
+		end
+		report["activity ring"] = string.format("band %d%% of the radius, for %dpx across and %dpx thick",
+			band, a.size, a.thickness or 3)
 		if activity.SetSwipeColor then
 			pcall(activity.SetSwipeColor, activity, a.color[1], a.color[2], a.color[3], a.alpha)
 		end
