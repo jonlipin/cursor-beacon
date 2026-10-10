@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.11.0 - 2026-10-10
+
+Added:
+
+- **A Look tab with a window style**: Automatic, Blizzard or Dark. Automatic uses EllesmereUI's look
+  when it is running and Blizzard's otherwise. Dark is a flat dark style built in and needs no
+  other addon. A line under the choice says which style is drawn now and what a reload would
+  change, and a Dark background opacity slider sets how much of the world shows through it,
+  grayed out unless Dark is chosen. Switching from Blizzard to a drawn style happens at once;
+  leaving a drawn style takes a reload, and the addon offers one.
+- The style applies to the addon's own window, the one `/cursor window` opens: its backdrop, title
+  bar and close button. The controls inside keep the game's look, because they are the same ones
+  the game's options window shows. The minimap button and everything drawn at the cursor stay as
+  they are.
+- **EllesmereUI support**: under its look the window follows EllesmereUI's style and accent color.
+- `/cursor style auto`, `blizzard` or `dark` sets the window style from chat, or steps to the next
+  one on its own.
+
+Fixed:
+
+- The close button on the addon's own window works in combat. It used to be refused with
+  "Interface action blocked".
+- The minimap button stays where a minimap button collector, such as EllesmereUI's, puts it,
+  instead of jumping back to the rim of the map.
+
+Changed:
+
+- American spelling throughout: the Color, Pointer color, Ring color, Dot color and Trail color
+  settings, the Center dot section, and the rest of the text you read.
+
 ## 1.10.0
 
 Added:
@@ -16,7 +46,7 @@ Changed:
 - **A gentler default look for the activity ring**: 40 pixels across instead of 56, 3 pixels thick,
   in a soft, slightly warm white at half opacity, instead of a bold gold.
 - The Information tab is tidier: the readout's two offsets share a row, and so do the ring's size
-  and thickness, and its opacity and colour. The ring's colour is now just called Colour, so it is
+  and thickness, and its opacity and color. The ring's color is now just called Color, so it is
   not confused with the cursor ring's on the Ring and dot tab.
 
 **After updating, quit the game and start it again** rather than just reloading the interface. The
@@ -29,7 +59,7 @@ Fixed:
 - **The activity ring drew a black square behind itself.** The game's own ring pictures are glows
   on black, made to be added on top of what is behind them, and the sweep can only lay a picture
   over the screen, so the black showed. The addon now ships its own ring: plain white with a clear
-  middle and clear corners, so the sweep colour tints it to any colour you like and nothing is
+  middle and clear corners, so the sweep color tints it to any color you like and nothing is
   drawn around it. It no longer follows the cursor ring's shape, which 1.9.1 tried; none of those
   shapes suit a sweep.
 
@@ -152,7 +182,7 @@ Housekeeping, no change to how anything behaves.
 - The offline test harness now ships in the repository under `tests/`, with notes on running it.
   It covers 165 checks and runs in four modes, each one taking something away from the stubbed
   client to prove the addon degrades rather than breaks.
-- Added the project website, category and licence to the addon's own details.
+- Added the project website, category and license to the addon's own details.
 - Cleared out two leftovers that were written and never read, and brought the note at the top of
   the readout code in line with what the client actually does with protected values.
 
@@ -228,7 +258,7 @@ Added:
 - "Keep up with the cursor" on the Cursor tab. It pushes the drawn art forward along the direction
   you are moving by about one frame of travel, which cancels that delay. On at 100 percent by
   default; raise it if it still trails, lower it if it overshoots, set it to zero for the old
-  behaviour. A cap keeps a warp across the screen from flinging the art off.
+  behavior. A cap keeps a warp across the screen from flinging the art off.
 
 Changed:
 
@@ -274,16 +304,16 @@ Added:
 
 - Big pointer tab. Draws a copy of the game's pointer art at any size from 32 to 512 pixels, which
   is how the cursor gets past the 64 pixel ceiling on the game's own cursor size setting. Choose
-  the shape (arrow, cast, hand, attack, grab, quest or crosshair), the size, the colour tint and
+  the shape (arrow, cast, hand, attack, grab, quest or crosshair), the size, the color tint and
   the opacity, with an optional dark outline behind it and two nudge sliders for lining the drawn
   tip up with the real one. Each shape knows where its own hotspot is, so an arrow hangs its tip on
-  the cursor while the crosshair centres on it.
+  the cursor while the crosshair centers on it.
 - The pointer size is an absolute pixel size, so the overall size slider does not drag it around.
 
 Changed:
 
 - Wider size ranges everywhere: overall size now reaches 500 percent (was 300), the ring 320 pixels
-  (was 128), the centre dot 120 (was 40), trail segments 160 (was 64) and the activity sweep 400
+  (was 128), the center dot 120 (was 40), trail segments 160 (was 64) and the activity sweep 400
   (was 160).
 - The Cursor tab now says where the game's own 64 pixel limit is and points at the Big pointer tab.
 
@@ -300,10 +330,10 @@ Added:
 
 - Blizzard cursor size control (Auto, Small, Medium, Large) through the accessibility cursor
   setting, with Auto leaving the setting untouched.
-- Cursor ring with a choice of shapes, size, opacity, colour, optional spin, and optional growth
+- Cursor ring with a choice of shapes, size, opacity, color, optional spin, and optional growth
   when the cursor is over a unit or a button.
-- Centre dot with its own shape, size and colour.
-- Cursor trail of up to twenty segments, with tightness, taper, fade and colour. The smoothing is
+- Center dot with its own shape, size and color.
+- Cursor trail of up to twenty segments, with tightness, taper, fade and color. The smoothing is
   frame rate independent.
 - Activity sweep around the cursor for the global cooldown, the current cast or channel, or both.
 - Cursor readout beside the pointer: target name and level, target health, your health, your power,

@@ -1,21 +1,29 @@
-## 1.10.0
+## 1.11.0 - 2026-10-10
 
 Added:
 
-- **A thickness slider for the activity ring**, from a hairline to a solid disc. The ring's shape
-  comes from a picture, so the addon ships thirteen rings of different thickness and uses the one
-  nearest what you ask for, given the ring's size.
-- **A Default look button** on the activity ring. Changing the defaults never changes settings you
-  have already saved, so this is how to get the new look below without resetting everything else.
-  It leaves what the ring shows for (Cooldown, Casting, Both) alone.
+- **A Look tab with a window style**: Automatic, Blizzard or Dark. Automatic uses EllesmereUI's look
+  when it is running and Blizzard's otherwise. Dark is a flat dark style built in and needs no
+  other addon. A line under the choice says which style is drawn now and what a reload would
+  change, and a Dark background opacity slider sets how much of the world shows through it,
+  grayed out unless Dark is chosen. Switching from Blizzard to a drawn style happens at once;
+  leaving a drawn style takes a reload, and the addon offers one.
+- The style applies to the addon's own window, the one `/cursor window` opens: its backdrop, title
+  bar and close button. The controls inside keep the game's look, because they are the same ones
+  the game's options window shows. The minimap button and everything drawn at the cursor stay as
+  they are.
+- **EllesmereUI support**: under its look the window follows EllesmereUI's style and accent color.
+- `/cursor style auto`, `blizzard` or `dark` sets the window style from chat, or steps to the next
+  one on its own.
+
+Fixed:
+
+- The close button on the addon's own window works in combat. It used to be refused with
+  "Interface action blocked".
+- The minimap button stays where a minimap button collector, such as EllesmereUI's, puts it,
+  instead of jumping back to the rim of the map.
 
 Changed:
 
-- **A gentler default look for the activity ring**: 40 pixels across instead of 56, 3 pixels thick,
-  in a soft, slightly warm white at half opacity, instead of a bold gold.
-- The Information tab is tidier: the readout's two offsets share a row, and so do the ring's size
-  and thickness, and its opacity and colour. The ring's colour is now just called Colour, so it is
-  not confused with the cursor ring's on the Ring and dot tab.
-
-**After updating, quit the game and start it again** rather than just reloading the interface. The
-rings are new files, and the game only notices new files when it starts.
+- American spelling throughout: the Color, Pointer color, Ring color, Dot color and Trail color
+  settings, the Center dot section, and the rest of the text you read.

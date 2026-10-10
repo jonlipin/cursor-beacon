@@ -3,7 +3,7 @@ const fs = require('fs');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 const DIR = (process.argv.slice(2).find(a => !a.startsWith('--')) || 'C:/Users/jonli/cursor-beacon/');
 const L = lauxlib.luaL_newstate(); lualib.luaL_openlibs(L);
-const files = ['Core.lua', 'Effects.lua', 'Models.lua', 'Info.lua', 'Options.lua'];
+const files = ['Core.lua', 'Effects.lua', 'Models.lua', 'Info.lua', 'Options.lua', 'Styles.lua', 'CursorBeacon_Skins.lua'];
 
 const stub = String.raw`
 local VERBS = { "Set", "Get", "Is", "Create", "Register", "Enable", "Clear", "Hook", "Start", "Stop", "Has", "Num", "Add", "Unregister", "Disable", "Raise", "Lower", "Lock", "Unlock" }
@@ -62,12 +62,23 @@ local function obj(kind, template, name)
     if k == "SetFontString" then return function(s, f) s.fontString = f end end
     if k == "GetFontString" then return function(s) return s.fontString end end
     if k == "SetFrameStrata" then return function(s, v)
-      local valid = { BACKGROUND = 1, LOW = 1, MEDIUM = 1, HIGH = 1, DIALOG = 1, FULLSCREEN = 1, TOOLTIP = 1 }
+      local valid = { BACKGROUND = 1, LOW = 1, MEDIUM = 1, HIGH = 1, DIALOG = 1, FULLSCREEN = 1, FULLSCREEN_DIALOG = 1, TOOLTIP = 1 }
       if not valid[v] then error("bad strata " .. tostring(v)) end
       s.strata = v
     end end
     if k == "GetFrameStrata" then return function(s) return s.strata end end
     if k == "SetBackdrop" then return function(s, b) s.backdrop = b end end
+    -- Recorded for the window styles: events (so PLAYER_ENTERING_WORLD reaches every frame that
+    -- asked for it), fonts, the enabled state, frame levels and children.
+    if k == "RegisterEvent" then return function(s, e) s.events = s.events or {} s.events[e] = true end end
+    if k == "UnregisterEvent" then return function(s, e) if s.events then s.events[e] = nil end end end
+    if k == "UnregisterAllEvents" then return function(s) s.events = nil end end
+    if k == "SetFontObject" then return function(s, f) s.fontObject = f end end
+    if k == "SetEnabled" then return function(s, v) s.enabled = v and true or false end end
+    if k == "SetFrameLevel" then return function(s, v) s.level = v end end
+    if k == "GetFrameLevel" then return function(s) return s.level end end
+    if k == "GetChildren" then return function(s) return table.unpack(s.children or {}) end end
+    if k == "SetGradient" then return function(s, dir, a, b) s.gradient = { dir, a, b } end end
     if k == "StartMoving" or k == "StopMovingOrSizing" then return function() end end
     if k == "CreateTexture" then return function(s, n, layer, tmpl, sub) local r = obj("texture") r.parent = s r.layer = layer r.sub = sub TEXTURES[#TEXTURES + 1] = r return r end end
     if k == "CreateFontString" then return function(s, n, layer, font) local r = obj("fontstring") r.parent = s r.font = font FONTSTRINGS[#FONTSTRINGS + 1] = r return r end end
@@ -158,14 +169,37 @@ function CreateFrame(kind, name, parent, template)
   -- a frame made from it starts pinned to every edge of its parent.
   if template == "CooldownFrameTemplate" then f.allPoints = true end
   f.parent = parent
+  if parent then parent.children = parent.children or {} table.insert(parent.children, f) end
   if template == "ButtonFrameTemplate" or template == "DefaultPanelFlatTemplate" or template == "DefaultPanelTemplate" then
     f.NineSlice = obj("Frame") f.TitleText = obj("fontstring") f.Inset = obj("Frame")
+  end
+  -- The close button and the templates that bring one (DefaultPanel* do not) click through the
+  -- game's own UIPanelCloseButton_OnClick, as SharedUIPanelTemplates.lua has it.
+  if template == "UIPanelCloseButton" then f.scripts.OnClick = function(...) return UIPanelCloseButton_OnClick(...) end end
+  if template == "ButtonFrameTemplate" or template == "BasicFrameTemplate" then
+    local b = obj("Button", "UIPanelCloseButton") b.parent = f
+    f.children = f.children or {} table.insert(f.children, b)
+    b.scripts.OnClick = function(...) return UIPanelCloseButton_OnClick(...) end
+    f.CloseButton = b
   end
   FRAMES[#FRAMES + 1] = f
   if name then _G[name] = f end
   return f
 end
 UIParent = obj("Frame") UIParent.w, UIParent.h = 1920, 1080
+GameFontHighlight, GameFontDisable, GameFontNormal, GameFontNormalSmall = "GameFontHighlight", "GameFontDisable", "GameFontNormal", "GameFontNormalSmall"
+function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+-- A stand-in for EllesmereUI's skinning API (--eui). Every drawing call is recorded against the
+-- frame it was given; Shell lays a border frame over the window the way the real one does.
+if EUI_ON then
+  EUI_DONE = setmetatable({}, { __mode = "k" })
+  local function record(name, f) if type(f) == "table" then EUI_DONE[f] = (EUI_DONE[f] or "") .. name .. "," end end
+  EUI_S = setmetatable({
+    GetStyle = function() return "eui" end,
+    Shell = function(f) record("Shell", f) local border = CreateFrame("Frame", nil, f) border:SetFrameLevel(10) f.euiBorder = border end,
+  }, { __index = function(_, name) return function(f) record(name, f) end end })
+  EllesmereUI = { RegisterSkin = function(name, fn) EUI_REG, EUI_FN = name, fn end, _DispatchSkinRegistration = function() end }
+end
 WorldFrame = obj("Frame")
 Minimap = obj("Frame") Minimap.w, Minimap.h = 140, 140
 Minimap.rect = { 1700, 1840, 800, 940 }
@@ -248,7 +282,7 @@ rawset(ColorPickerFrame, "GetColorRGB", function() return 0.1, 0.2, 0.3 end)
 CATEGORIES = {}
 OPENED_CATEGORY = nil
 OPEN_REFUSED = false
--- The reported behaviour of this client: OpenToCategory NAVIGATES to a category, it does not open
+-- The reported behavior of this client: OpenToCategory NAVIGATES to a category, it does not open
 -- the options window. With the window shut it quietly does nothing and raises no error, so a
 -- caller that only checks pcall thinks it worked. Opening the window is a separate call.
 OPEN_NEEDS_PANEL = OPEN_NEEDS_PANEL ~= false
@@ -256,11 +290,27 @@ OPEN_NEEDS_PANEL = OPEN_NEEDS_PANEL ~= false
 OPEN_ID_ONLY = OPEN_ID_ONLY == true
 SettingsPanel = obj("Frame") SettingsPanel:Hide()
 SettingsPanel.Open = function(self) self:Show() end
-function ShowUIPanel(f) f:Show() end
+-- On this client ShowUIPanel and HideUIPanel refuse addon code in combat: the player sees an
+-- "Interface action blocked" message and nothing else. BLOCKED counts the refusals.
+BLOCKED = 0
+function ShowUIPanel(f)
+  if InCombatLockdown() then BLOCKED = BLOCKED + 1 return end
+  f:Show()
+end
 function HideUIPanel(f)
+  if InCombatLockdown() then BLOCKED = BLOCKED + 1 return end
   f:Hide()
   if f == SettingsPanel then
     for _, c in ipairs(CATEGORIES) do c.frame:Hide() end
+  end
+end
+-- The close button template's own click, as the client's SharedUIPanelTemplates.lua has it.
+function UIPanelCloseButton_OnClick(self)
+  local parent = self:GetParent()
+  if parent then
+    local continueHide = true
+    if parent.onCloseCallback then continueHide = parent.onCloseCallback(self) end
+    if continueHide then HideUIPanel(parent) end
   end
 end
 local nextCategoryID = 0
@@ -317,7 +367,8 @@ local function loop(dt)
 end
 
 -- 1. Load
-CursorBeaconDB = {}
+-- --dark starts from a saved Dark choice, so the whole run below happens in the Dark style.
+CursorBeaconDB = DARK_START and { style = "dark" } or {}
 CursorBeaconAccountDB = nil
 fire("ADDON_LOADED", "CursorBeacon")
 check("db built", type(ns.db) == "table" and ns.db.ring ~= nil)
@@ -336,6 +387,14 @@ check("missing art dropped from the shape list", ns.report["textures ring"] == "
 check("options content starts hidden", CursorBeaconOptions and not CursorBeaconOptions:IsShown())
 
 fire("PLAYER_LOGIN")
+-- EllesmereUI hands its drawing calls over at login; every style is drawn once the world is up.
+if EUI_FN then EUI_FN(EUI_S) end
+local function fireAll(event, ...)
+  for _, f in ipairs(FRAMES) do
+    if type(f.events) == "table" and f.events[event] and f.scripts.OnEvent then f.scripts.OnEvent(f, event, ...) end
+  end
+end
+fireAll("PLAYER_ENTERING_WORLD")
 check("cursor size probed", ns.report["cursor size cvar"]:sub(1, 2) == "ok", ns.report["cursor size cvar"])
 
 -- 2. The loop follows the cursor
@@ -490,11 +549,11 @@ else
   ns.db.pointer.offsetX, ns.db.pointer.offsetY = 0, 0
   ns.Refresh()
 
-  check("the crosshair centres instead", ns.PointerAnchor("Interface\\CURSOR\\Crosshairs") == "CENTER")
+  check("the crosshair centers instead", ns.PointerAnchor("Interface\\CURSOR\\Crosshairs") == "CENTER")
   ns.db.pointer.texture = "Interface\\CURSOR\\Crosshairs"
   ns.Refresh()
   loop()
-  check("and the drawn crosshair is centred on the cursor", pointer.point[1] == "CENTER", pointer.point[1])
+  check("and the drawn crosshair is centered on the cursor", pointer.point[1] == "CENTER", pointer.point[1])
   ns.db.pointer.texture = "Interface\\CURSOR\\Point"
 
   ns.db.pointer.size = 512
@@ -536,7 +595,7 @@ else
   -- Thickness picks the nearest ring file: a sweep's band can only change by changing its texture.
   check("the default is a 40px ring", ns.defaults.activity.size == 40, ns.defaults.activity.size)
   check("3px thick", ns.defaults.activity.thickness == 3, ns.defaults.activity.thickness)
-  check("in a soft white, not a strong colour", ns.defaults.activity.color[1] > 0.85 and ns.defaults.activity.color[3] > 0.8
+  check("in a soft white, not a strong color", ns.defaults.activity.color[1] > 0.85 and ns.defaults.activity.color[3] > 0.8
     and ns.defaults.activity.alpha <= 0.6)
   local a = ns.db.activity
   a.size, a.thickness = 40, 3
@@ -803,7 +862,7 @@ mm.scripts.OnLeave(mm)
 local oldAngle = ns.db.minimap.angle
 mm.scripts.OnDragStart(mm)
 
--- The minimap centre is at 1770, 870 in the stub. Dragging to a known spot has to land on a known
+-- The minimap center is at 1770, 870 in the stub. Dragging to a known spot has to land on a known
 -- angle: the game's own atan2 answers in degrees while math.atan2 answers in radians, and running
 -- math.deg over the wrong one multiplies the angle by about fifty seven.
 CURSOR = { 1770, 970 }
@@ -992,7 +1051,7 @@ else
     local px, py = ActorOnScreen()
     worst = math.max(worst, math.abs(px - p[1]), math.abs(py - p[2]))
   end
-  check("the spell sits exactly under the cursor, centre to corners", worst < 0.01, worst .. " px off at worst")
+  check("the spell sits exactly under the cursor, center to corners", worst < 0.01, worst .. " px off at worst")
 
   -- Size moves the camera rather than scaling the actor. A scaled actor keeps full sized particles
   -- and ribbons, so it never got small enough; pulling the camera back shrinks all of it evenly.
@@ -1231,7 +1290,7 @@ end
 check("the pages were found", pagesChecked >= 8, pagesChecked)
 check("no options page runs off the bottom", overflow == nil, overflow)
 
--- Two colour swatches with one name is confusing (the activity ring's was briefly "Ring colour",
+-- Two color swatches with one name is confusing (the activity ring's was briefly "Ring color",
 -- the same as the cursor ring's, on another tab).
 local swatchNames, dupe = {}, nil
 for _, fs in ipairs(FONTSTRINGS) do
@@ -1241,7 +1300,7 @@ for _, fs in ipairs(FONTSTRINGS) do
     swatchNames[fs.text] = true
   end
 end
-check("no two colour swatches share a name", dupe == nil, dupe)
+check("no two color swatches share a name", dupe == nil, dupe)
 
 -- Size and Thickness share a row, as do the readout's two offsets.
 local function SliderHolder(minV, maxV)
@@ -1263,7 +1322,7 @@ defaultButton.scripts.OnClick(defaultButton)
 local d = ns.defaults.activity
 check("Default look restores the size, thickness and opacity",
   act.size == d.size and act.thickness == d.thickness and act.alpha == d.alpha, act.size .. "/" .. act.thickness .. "/" .. act.alpha)
-check("and the colour", act.color[1] == d.color[1] and act.color[2] == d.color[2] and act.color[3] == d.color[3])
+check("and the color", act.color[1] == d.color[1] and act.color[2] == d.color[2] and act.color[3] == d.color[3])
 check("as a copy, so changing it later cannot change the defaults", act.color ~= d.color)
 check("but leaves what it shows alone", act.mode == "both", act.mode)
 act.mode = "off"
@@ -1299,18 +1358,18 @@ check("found the overall size slider", scaleSlider ~= nil)
 scaleSlider:SetValue(152)
 check("slider rounds to its step and saves", math.abs(ns.db.scale - 1.5) < 0.001, ns.db.scale)
 
--- The colour picker is handed our current colour and its result is stored.
-local colourButton
+-- The color picker is handed our current color and its result is stored.
+local colorButton
 for _, fs in ipairs(FONTSTRINGS) do
-  if fs.text == "Ring colour" then colourButton = fs.parent end
+  if fs.text == "Ring color" then colorButton = fs.parent end
 end
-check("found the ring colour swatch", colourButton ~= nil and colourButton.h == 22)
-colourButton.scripts.OnClick(colourButton)
-check("picker opened with the current colour", PICKED ~= nil and PICKED.r ~= nil)
+check("found the ring color swatch", colorButton ~= nil and colorButton.h == 22)
+colorButton.scripts.OnClick(colorButton)
+check("picker opened with the current color", PICKED ~= nil and PICKED.r ~= nil)
 PICKED.swatchFunc()
 check("picker result saved", math.abs(ns.db.ring.color[1] - 0.1) < 0.001, ns.db.ring.color[1])
 PICKED.cancelFunc({ r = 0.9, g = 0.8, b = 0.7 })
-check("cancel restores the old colour", math.abs(ns.db.ring.color[1] - 0.9) < 0.001, ns.db.ring.color[1])
+check("cancel restores the old color", math.abs(ns.db.ring.color[1] - 0.9) < 0.001, ns.db.ring.color[1])
 
 -- Navigation swaps pages.
 local nav
@@ -1335,6 +1394,174 @@ canvas:Show()
 check("opening the game options closes the window", not CursorBeaconWindow:IsShown())
 canvas:Hide()
 
+-- 10b. Window styles (Styles.lua). Only the addon's own window is restyled; the controls inside
+-- it are the same frames the game's options page shows, so they keep the game's look. Run as
+-- it is for Blizzard, with --dark for a saved Dark choice, and with --eui for EllesmereUI.
+do
+  local Styles = ns.Styles
+  local win = CursorBeaconWindow
+  local close = win.cbClose
+  local function Drawn(parent)
+    local n = 0
+    for _, tex in ipairs(TEXTURES) do if tex.parent == parent then n = n + 1 end end
+    return n
+  end
+  local styleButtons, opacity = {}, nil
+  for _, f in ipairs(FRAMES) do
+    if f.kind == "Button" and (f.cbValue == "auto" or f.cbValue == "blizzard" or f.cbValue == "dark") then styleButtons[f.cbValue] = f end
+    if f.kind == "Slider" and f.minV == 0 and f.maxV == 100 then opacity = f end
+  end
+  local function Pick(style) local b = styleButtons[style] b.scripts.OnClick(b) end
+  local function Grayed() return opacity.alpha == 0.5 and opacity.enabled == false and opacity.cbCaption.fontObject == "GameFontDisable" end
+  local function Live() return opacity.alpha == 1 and opacity.enabled == true and opacity.cbCaption.fontObject == "GameFontHighlight" end
+  local function Backdrop()
+    for _, tex in ipairs(TEXTURES) do if tex.parent == win and tex.layer == "BACKGROUND" and tex.sub == -8 then return tex end end
+  end
+  local function BackdropAlpha() local b = Backdrop() return b and b.gradient and b.gradient[2].a end
+  local function Prompt() return CursorBeaconReloadPrompt end
+  local function PromptShown() return Prompt() ~= nil and Prompt():IsShown() end
+  local function SkinErrors()
+    local n = 0
+    for k, v in pairs(ns.report) do if k:find("skin error", 1, true) then n = n + 1 print("  " .. k .. ": " .. tostring(v)) end end
+    return n
+  end
+
+  -- Compared byte for byte with ShardGrid's live copy (read on the JS side), so a new version of
+  -- the shared file needs no change here.
+  check("the style file is the shared one", Styles ~= nil and STYLES_SHARED == true, STYLES_SHARED_WHY)
+  check("defaults carry a style and a Dark opacity", ns.defaults.style == "auto" and ns.defaults.darkAlpha == 0.92)
+  check("the Look tab was built", ns.report["page look"] == "ok", ns.report["page look"])
+  check("it offers all three styles", styleButtons.auto and styleButtons.blizzard and styleButtons.dark
+    and styleButtons.auto.text == "Automatic" and styleButtons.dark.text == "Dark")
+  check("and the Dark opacity slider", opacity ~= nil and opacity.cbCaption.text == "Dark background opacity")
+  check("the window keeps its close button for the styles", BARE or type(close) == "table")
+
+  if EUI_ON then
+    local function Did(f, what) return f ~= nil and (EUI_DONE[f] or ""):find(what, 1, true) ~= nil end
+    check("registered with EllesmereUI under the folder name", EUI_REG == "CursorBeacon", EUI_REG)
+    check("Automatic draws EllesmereUI's look", Styles.Applied() == "eui", Styles.Applied())
+    check("and the debug line says so", ns.report.skin == "EllesmereUI (eui style)", ns.report.skin)
+    check("the window is shelled", Did(win, "Shell"))
+    check("its title goes through EllesmereUI's font", Did(win.cbTitle, "Font"))
+    check("its close button is restyled", Did(close, "CloseButton"))
+    check("and raised above the border EllesmereUI lays over the window",
+      win.euiBorder ~= nil and (close.level or 0) > (win.euiBorder.level or 0), tostring(close.level))
+    check("Dark drew nothing of its own", Drawn(win) == 0, Drawn(win))
+    check("the controls are left alone, they are the options page's too", not Did(styleButtons.dark, "Button") and not Did(opacity, "Slider"))
+    check("the opacity slider is grayed while it is not Dark", Grayed())
+    Pick("dark")
+    check("choosing Dark over EllesmereUI asks for a reload", PromptShown())
+    check("in EllesmereUI's look, like the rest of the addon", Did(Prompt(), "Shell") and Did(Prompt().reload, "Button"))
+    check("and the debug line says what a reload brings", (ns.report.skin or ""):find("Dark after a /reload", 1, true) ~= nil, ns.report.skin)
+    check("the slider is live for Dark", Live())
+    Pick("auto")
+    check("back to Automatic takes the prompt away", not PromptShown())
+    check("and the slider is grayed again", Grayed())
+  else
+    if DARK_START then
+      check("a saved Dark choice is drawn at login", Styles.Applied() == "dark", Styles.Applied())
+      check("the debug line says Dark", ns.report.skin == "Dark", ns.report.skin)
+    else
+      check("Blizzard draws nothing", Styles.S == nil and Styles.Applied() == nil)
+      check("and says why in the debug line", ns.report.skin == "Blizzard (EllesmereUI is not loaded)", ns.report.skin)
+      check("the window has none of the Dark art", Drawn(win) == 0, Drawn(win))
+      check("the opacity slider is grayed for Automatic", Grayed())
+      Pick("blizzard")
+      check("and for Blizzard", Grayed() and ns.db.style == "blizzard")
+      check("Blizzard to Blizzard asks for nothing", not PromptShown())
+      Pick("dark")
+      check("Blizzard to Dark is drawn at once", Styles.Applied() == "dark" and ns.report.skin == "Dark", ns.report.skin)
+      check("with no reload asked for", not PromptShown())
+    end
+    check("the window has a backdrop, title strip, accent rule and two edges", Drawn(win) == 11, Drawn(win))
+    check("in the addon's accent", (function()
+      for _, tex in ipairs(TEXTURES) do
+        if tex.parent == win and tex.layer == "BORDER" and tex.color and tex.color[3] == 1.0 and tex.color[1] == 0.25 then return true end
+      end
+    end)())
+    if not BARE then
+      check("the close button is a drawn X", Drawn(close) == 2, Drawn(close))
+      check("raised above the window's own frames", (close.level or 0) > 0, close.level)
+    end
+    check("the controls are left alone, they are the options page's too", Drawn(styleButtons.dark) == 0 and Drawn(opacity) == 0)
+    check("the backdrop takes the saved opacity", BackdropAlpha() == 0.92, BackdropAlpha())
+    check("the opacity slider is live for Dark", Live())
+    opacity:SetValue(62)
+    check("moving it saves to the step", math.abs(ns.db.darkAlpha - 0.6) < 1e-9, ns.db.darkAlpha)
+    check("and repaints the backdrop at once", math.abs((BackdropAlpha() or 0) - 0.6) < 1e-9, BackdropAlpha())
+    opacity.scripts.OnEnter(opacity)
+    opacity.scripts.OnLeave(opacity)
+    check("the options note says what is in use", (Styles.Note() or ""):find("In use: Dark", 1, true) ~= nil, Styles.Note())
+
+    -- Leaving a drawn style. The reload prompt falls back to plain buttons, so this runs on a
+    -- client with no templates (--bare) too.
+    do
+      Pick("blizzard")
+      check("leaving Dark asks for a reload", PromptShown())
+      check("and says why", (Prompt().text.text or ""):find("Switching Cursor Beacon to Blizzard", 1, true) ~= nil, Prompt().text.text)
+      check("the prompt is in the Dark style too", Drawn(Prompt()) == 11, Drawn(Prompt()))
+      check("the debug line says a reload is pending", (ns.report.skin or ""):find("Blizzard after a /reload", 1, true) ~= nil, ns.report.skin)
+      check("so does the options note", (Styles.Note() or ""):find("/reload", 1, true) ~= nil)
+      check("and the slider grays out", Grayed())
+      RELOADED = false
+      C_UI = { Reload = function() RELOADED = true end }
+      Prompt().reload.scripts.OnClick(Prompt().reload)
+      check("Reload now reloads", RELOADED)
+      C_UI = nil
+      Pick("dark")
+      check("coming back to Dark takes the prompt away", not PromptShown())
+
+      -- /cursor style
+      local before = #CHAT
+      SlashCmdList.CURSORBEACON("style auto")
+      check("/cursor style auto sets it", ns.db.style == "auto")
+      check("and says so, with the note", (CHAT[before + 1] or ""):find("window style: Automatic.", 1, true) ~= nil, CHAT[before + 1])
+      check("the choice is mirrored for the next login", CursorBeaconAccountDB.profile.style == "auto")
+      SlashCmdList.CURSORBEACON("style")
+      check("with no argument it steps to the next style", ns.db.style == "blizzard", ns.db.style)
+      SlashCmdList.CURSORBEACON("style dark")
+      check("/cursor style dark", ns.db.style == "dark" and not PromptShown())
+      before = #CHAT
+      SlashCmdList.CURSORBEACON("style neon")
+      check("an unknown style is refused", ns.db.style == "dark" and (CHAT[before + 1] or ""):find("use /cursor style", 1, true) ~= nil)
+    end
+  end
+
+  -- The window still shows the shared controls, in every style.
+  win:Show()
+  check("the styled window still adopts the controls", CursorBeaconOptions:GetParent() == win)
+  win:Hide()
+
+  -- 10c. The window's close X. The template's own click goes through HideUIPanel, which this
+  -- client refuses in combat, so the X has to hide the window itself. Checked after the styles,
+  -- so the restyled X is the one clicked.
+  if type(close) == "table" then
+    check("the X has a click of its own", type(close.scripts.OnClick) == "function")
+    win:Show()
+    INCOMBAT = true
+    local blocked = BLOCKED
+    pcall(close.scripts.OnClick, close, "LeftButton")
+    INCOMBAT = false
+    check("in combat the X closes the window", not win:IsShown())
+    check("with no interface action blocked", BLOCKED == blocked, BLOCKED - blocked)
+    win:Hide()
+    win:Show()
+    pcall(close.scripts.OnClick, close, "LeftButton")
+    check("out of combat the X still closes it", not win:IsShown())
+    win:Show()
+    check("and the window takes the controls back when it opens again", CursorBeaconOptions:GetParent() == win)
+    win:Hide()
+  else
+    check("no templates, so no close button to click (--bare)", BARE)
+  end
+  local before = #CHAT
+  SlashCmdList.CURSORBEACON("debug")
+  local skinLine
+  for i = before + 1, #CHAT do if CHAT[i]:find("skin:", 1, true) then skinLine = CHAT[i] end end
+  check("/cursor debug prints the skin line", skinLine ~= nil)
+  check("no skin errors", SkinErrors() == 0)
+end
+
 -- 11. Reset and the account mirror
 ns.db.ring.size = 99
 ns.MirrorToAccount()
@@ -1358,6 +1585,46 @@ for _, value in ipairs({ "BACKGROUND", "MEDIUM", "HIGH", "TOOLTIP" }) do
 end
 ns.db.strata = "TOOLTIP"
 
+
+-- A minimap button collector (EllesmereUI's, for one) takes the button off the minimap. Neither a
+-- refresh nor a drag tick may put it back on the rim then; on the minimap a drag still moves it.
+do
+  local mm = CursorBeaconMinimapButton
+  local function Script(f, e) return f.scripts[e] end
+  local holder = CreateFrame("Frame", nil, UIParent)
+  local own, setPoint = rawget(mm, "SetPoint"), mm.SetPoint
+  local moves, rel = 0, nil
+  rawset(mm, "SetPoint", function(self, ...) moves = moves + 1 rel = select(2, ...) return setPoint(self, ...) end)
+  local center, escale, cursor = rawget(Minimap, "GetCenter"), rawget(Minimap, "GetEffectiveScale"), GetCursorPosition
+  rawset(Minimap, "GetCenter", function() return 500, 500 end)
+  rawset(Minimap, "GetEffectiveScale", function() return 1 end)
+  GetCursorPosition = function() return 600, 560 end
+  -- The game has both: a degree based global atan2 and the radian based math.atan2.
+  local atan2Was, mathAtan2Was = atan2, math.atan2
+  atan2 = atan2 or function(y, x) return math.deg(math.atan(y, x)) end
+  math.atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+  local function Drag()
+    local start, stop = Script(mm, "OnDragStart"), Script(mm, "OnDragStop")
+    if not start then return false end
+    start(mm)
+    local tick = Script(mm, "OnUpdate")
+    if tick then tick(mm, 0.02) end
+    if stop then stop(mm) end
+    return tick ~= nil
+  end
+  mm:SetParent(holder)
+  Drag()
+  ns.Refresh()
+  check("minimap: a button a collector (EllesmereUI's) has taken stays where the collector put it", moves == 0, moves)
+  mm:SetParent(Minimap)
+  local dragged = Drag()
+  check("minimap: on the minimap a drag still moves it round the rim", dragged and moves > 0 and rel == Minimap, moves)
+  rawset(mm, "SetPoint", own)
+  rawset(Minimap, "GetCenter", center)
+  rawset(Minimap, "GetEffectiveScale", escale)
+  GetCursorPosition = cursor
+  atan2, math.atan2 = atan2Was, mathAtan2Was
+end
 -- 13. Nothing above left a stray error in the chat log
 local errors = 0
 for _, line in ipairs(CHAT) do if line:find("failed") then errors = errors + 1 end end
@@ -1377,16 +1644,29 @@ lua.lua_setglobal(L, to_luastring('SOURCES'));
 lua.lua_newtable(L); files.forEach((f, i) => { lua.lua_pushstring(L, to_luastring(f)); lua.lua_rawseti(L, -2, i + 1); });
 lua.lua_setglobal(L, to_luastring('FILES'));
 
+// Every addon carries the same Styles.lua; ShardGrid's live copy is the reference.
+(function compareSharedStyles() {
+  const reference = 'C:/Program Files (x86)/World of Warcraft/_classic_beta_/Interface/AddOns/ShardGrid/Styles.lua';
+  let shared = false, why;
+  if (!fs.existsSync(reference)) why = 'ShardGrid is not installed at ' + reference;
+  else if (Buffer.compare(fs.readFileSync(reference), fs.readFileSync(DIR + 'Styles.lua')) === 0) shared = true;
+  else why = 'Styles.lua differs from ' + reference;
+  lua.lua_pushboolean(L, shared); lua.lua_setglobal(L, to_luastring('STYLES_SHARED'));
+  lua.lua_pushstring(L, to_luastring(why || '')); lua.lua_setglobal(L, to_luastring('STYLES_SHARED_WHY'));
+})();
+
 const pre = (process.argv.includes('--bare')
   ? 'BARE=true\nBAD_TEMPLATES={UICheckButtonTemplate=true,ChatConfigCheckButtonTemplate=true,MinimalSliderTemplate=true,UISliderTemplate=true,OptionsSliderTemplate=true,UIPanelButtonTemplate=true,UIPanelCloseButton=true,CooldownFrameTemplate=true,DefaultPanelFlatTemplate=true,DefaultPanelTemplate=true,ButtonFrameTemplate=true,BasicFrameTemplate=true,BackdropTemplate=true}\n'
   : '') + (process.argv.includes('--verbose') ? 'VERBOSE=true\n' : '')
   + (process.argv.includes('--noart') ? 'NO_POINTER_ART=true\n' : '')
   + (process.argv.includes('--nomathatan2') ? 'WOW_HAS_MATH_ATAN2=false\n' : '')
-  + (process.argv.includes('--nomodelscene') ? 'NO_MODELSCENE=true\n' : '');
+  + (process.argv.includes('--nomodelscene') ? 'NO_MODELSCENE=true\n' : '')
+  + (process.argv.includes('--dark') ? 'DARK_START=true\n' : '')
+  + (process.argv.includes('--eui') ? 'EUI_ON=true\n' : '');
 // The sweep's rings are files the Lua above can only name, so they are checked here. The band list
 // in Effects.lua and the one in the tool that makes the files must agree; every band must have its
 // file in the repository; and each file must be a power of two, white in every pixel (so the sweep
-// colour alone decides the colour), clear in the corners, and have the band its name says,
+// color alone decides the color), clear in the corners, and have the band its name says,
 // measured from the pixels.
 (function checkRingFiles() {
   const path = require('path');

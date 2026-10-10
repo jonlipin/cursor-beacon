@@ -1,7 +1,7 @@
 # Offline harness
 
 `cursortest.js` runs the addon's Lua outside the game. It stubs the parts of the WoW API the addon
-touches, loads the four Lua files, and walks the main paths: the saved variables, the draw loop,
+touches, loads the Lua files in TOC order, and walks the main paths: the saved variables, the draw loop,
 the readout, the options, the minimap button and the slash commands.
 
 It exists because this addon is developed against a client that cannot easily be scripted, and
@@ -30,6 +30,8 @@ Each mode makes the stubbed client less capable, to prove the addon degrades ins
 | `--bare` | Every UI template is missing, so all the fallback chains are exercised |
 | `--noart` | The `Interface\CURSOR` art is absent, so the big pointer must switch itself off |
 | `--nomathatan2` | Only the game's degree based `atan2` exists, not the radian based `math.atan2` |
+| `--dark` | The Dark window style was chosen before this login, so the whole run happens in it |
+| `--eui` | EllesmereUI is running, through a stand-in that records every drawing call |
 | `--verbose` | Prints what the addon writes to chat |
 
 ## Things it deliberately models

@@ -19,8 +19,8 @@ pointer itself gets bigger. Leave it on Auto and the addon does not touch the se
 
 **Big pointer.** The game's own setting stops at 64 pixels. For anything larger, Cursor Beacon can
 draw a copy of the pointer at any size from 32 to 512 pixels, in a choice of the game's own cursor
-shapes, with a colour tint, an optional dark outline and two nudge sliders. Each shape knows where
-its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centres on it.
+shapes, with a color tint, an optional dark outline and two nudge sliders. Each shape knows where
+its hotspot is, so an arrow hangs its tip on the cursor while the crosshair centers on it.
 
 **The real cursor is always on top, and that cannot be changed.** The game puts its own cursor on
 screen after the whole interface is drawn, so there is no layer above it for an addon to draw into
@@ -30,11 +30,11 @@ has been blocked since Cataclysm. What does help is on the Real cursor tab: set 
 to its smallest and the drawn pointer large, and the small arrow sits inside the big one's
 silhouette near the tip rather than beside it.
 
-**Ring.** A coloured ring around the cursor, with a choice of shapes, size, opacity, colour and an
+**Ring.** A colored ring around the cursor, with a choice of shapes, size, opacity, color and an
 optional slow spin. It can swell when the cursor is over a unit or a button, which makes clickable
 things obvious at a glance.
 
-**Centre dot.** A small mark at the exact cursor point, with its own shape, size and colour.
+**Center dot.** A small mark at the exact cursor point, with its own shape, size and color.
 
 **Trail.** Up to twenty segments that chase the cursor. Tightness controls how closely they follow,
 and the trail can taper and fade along its length. The smoothing is corrected for frame time, so it
@@ -50,7 +50,7 @@ on screen and works the mapping out from that, rather than relying on a number t
 each model and screen size. Only the spells the client actually has are offered.
 
 **Activity sweep.** A cooldown style wedge around the cursor showing the global cooldown, the spell
-you are casting or channelling, or both.
+you are casting or channeling, or both.
 
 **Cursor readout.** A short block of text beside the pointer: target name and level, a combat
 warning, map coordinates, frame rate, latency and the clock. Target health, your health and your
@@ -62,6 +62,13 @@ either way; where a client does allow reading, the bar also carries a percentage
 draws is positioned during the frame and only reaches the screen on the next one, so it trails
 behind while you move. "Keep up with the cursor" pushes the drawn art forward along the direction of
 travel by about one frame of movement to close that gap. It is on by default.
+
+**Look.** The Look tab sets the style of the addon's own window, the one `/cursor window` opens:
+Automatic (EllesmereUI's look when it is running, otherwise Blizzard), Blizzard or Dark, with a
+slider for how much of the world shows through the Dark style. It restyles the window's backdrop,
+title bar and close button; the controls inside keep the game's look, because they are the same
+ones the game's options window shows. Leaving a drawn style for another takes a reload, and the
+addon offers one.
 
 **When to show.** Any of it can be limited to combat, hidden while you hold a mouse button to turn
 the camera, and faded out when the mouse stops moving. There is a shared size, opacity and draw
@@ -76,6 +83,7 @@ layer for everything.
 | `/cursor on`, `/cursor off` | Toggles every effect |
 | `/cursor size auto\|1\|2\|3` | Sets the Blizzard cursor size |
 | `/cursor minimap` | Shows or hides the minimap button |
+| `/cursor style auto\|blizzard\|dark` | Sets the style of the addon's own window; on its own, steps to the next one |
 | `/cursor test` | Runs the activity sweep for four seconds |
 | `/cursor reset` | Restores the defaults |
 | `/cursor debug` | Prints what resolved on this client |

@@ -11,7 +11,7 @@
 
 local ADDON, ns = ...
 
-ns.version = "1.10.0"
+ns.version = "1.11.0"
 ns.report = {}
 
 local report = ns.report
@@ -28,6 +28,11 @@ ns.Print = Print
 ns.defaults = {
 	enabled = true,
 
+	-- The look of the addon's own window (Styles.lua): "auto", "blizzard" or "dark", and how
+	-- see-through the Dark style's backdrop is.
+	style = "auto",
+	darkAlpha = 0.92,
+
 	-- Blizzard hardware cursor
 	applyCursorSize = false,
 	cursorSize = -1, -- -1 auto, 0 = 32px, 1 = 48px, 2 = 64px
@@ -38,7 +43,7 @@ ns.defaults = {
 		angle = 215,
 	},
 
-	-- Shared look and behaviour of everything we draw
+	-- Shared look and behavior of everything we draw
 	-- `lead` pushes the drawn art forward along the direction of travel to cancel the frame of
 	-- delay between positioning it and the screen showing it. 100 is one frame's worth.
 	lead = 100,
@@ -107,7 +112,7 @@ ns.defaults = {
 	},
 
 	-- The default look is meant to be easy on the eyes: a thin ring in a soft, slightly warm white
-	-- at half opacity, rather than a bright solid colour.
+	-- at half opacity, rather than a bright solid color.
 	activity = {
 		mode = "off", -- off | gcd | cast | both
 		size = 40,
@@ -287,7 +292,7 @@ ns.RING_TEXTURES = {
 }
 
 -- The game's own pointer art. `anchor` is the point on the texture that sits on the exact cursor
--- position: the arrows carry their tip in the top left corner, the crosshair is centred.
+-- position: the arrows carry their tip in the top left corner, the crosshair is centered.
 ns.POINTER_TEXTURES = {
 	{ path = "Interface\\CURSOR\\Point", label = "Arrow", anchor = "TOPLEFT" },
 	{ path = "Interface\\CURSOR\\Cast", label = "Cast", anchor = "TOPLEFT" },
@@ -344,6 +349,10 @@ local function MirrorToAccount()
 	CursorBeaconAccountDB.version = ns.version
 end
 ns.MirrorToAccount = MirrorToAccount
+
+-- The settings table as it is now. The window styles ask for it each time, because a reset
+-- swaps the whole table.
+function ns.DB() return ns.db end
 
 -- The client sometimes starts a session with a blank per character table even though the file
 -- on disk is fine. When the character table looks untouched we adopt the account mirror.
@@ -471,6 +480,7 @@ local function PrintHelp()
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor on|r or |cffffff00off|r toggles every effect")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor size auto|1|2|3|r sets the Blizzard cursor size")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor minimap|r shows or hides the minimap button")
+	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor style|r auto, blizzard or dark sets the look of the addon's own window")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor test|r runs the activity sweep for a few seconds")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor reset|r restores defaults")
 	DEFAULT_CHAT_FRAME:AddMessage("   |cffffff00/cursor debug|r prints what resolved on this client")
@@ -496,6 +506,25 @@ SlashCmdList["CURSORBEACON"] = function(msg)
 		ns.Refresh()
 		if ns.SyncOptions then ns.SyncOptions() end
 		Print("minimap button " .. (want and "shown" or "hidden") .. ".")
+	elseif cmd == "style" then
+		local Styles = ns.Styles
+		if not Styles then
+			Print("the window styles did not load, see /cursor debug.")
+			return
+		end
+		if rest == "auto" or rest == "automatic" then
+			Styles.Set("auto")
+		elseif rest == "blizzard" or rest == "dark" then
+			Styles.Set(rest)
+		elseif rest == "" then
+			Styles.Cycle(1)
+		else
+			Print("use /cursor style auto, blizzard or dark.")
+			return
+		end
+		MirrorToAccount()
+		if ns.SyncOptions then ns.SyncOptions() end
+		Print("window style: " .. Styles.Name(ns.db.style) .. ". " .. Styles.Note())
 	elseif cmd == "test" then
 		if not (ns.Effects and ns.Effects.PreviewActivity) then
 			Print("the activity sweep was not built on this client, see /cursor debug.")

@@ -2,11 +2,12 @@
 ## Title: Cursor Beacon
 ## Notes: Cursor size, tracking effects and an at-cursor readout, with a Blizzard style options page.
 ## Author: jonlipin
-## Version: 1.10.0
+## Version: 1.11.0
 ## SavedVariables: CursorBeaconAccountDB
 ## SavedVariablesPerCharacter: CursorBeaconDB
 ## IconTexture: Interface\Cooldown\ping4
 ## X-Website: https://github.com/jonlipin/cursor-beacon
+## OptionalDeps: EllesmereUI
 ## X-Category: Interface Enhancements
 ## X-License: MIT
 
@@ -15,3 +16,5 @@ Effects.lua
 Models.lua
 Info.lua
 Options.lua
+Styles.lua
+CursorBeacon_Skins.lua

@@ -1,5 +1,5 @@
 -- Cursor Beacon
--- Effects: everything that is drawn at the cursor. A ring, a centre dot, a lagging trail and
+-- Effects: everything that is drawn at the cursor. A ring, a center dot, a lagging trail and
 -- an activity swipe that shows the global cooldown or the current cast.
 --
 -- One OnUpdate drives all of it. Positions come from GetCursorPosition(), which reports screen
@@ -172,7 +172,7 @@ function Effects.Init()
 		-- A bare Cooldown has no art of its own. Without a swipe texture it runs its timer and
 		-- draws nothing at all, which is exactly what it looked like before this was set.
 		-- The sweep reveals its texture like a clock hand, so the texture is its shape. It has its
-		-- own ring, shipped in Media: plain white so the sweep colour tints it to anything, with
+		-- own ring, shipped in Media: plain white so the sweep color tints it to anything, with
 		-- real transparency. The game's own ring art is additive glow on black, which a sweep
 		-- cannot blend: it drew a black square behind the ring. Before that it was a plain white
 		-- square, which drew a solid square pie.

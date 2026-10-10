@@ -3,7 +3,7 @@
 // its shape, and the band can only be made thinner or thicker by swapping the texture. The addon
 // picks the nearest of these for the size and thickness chosen in the options.
 //
-// White so SetSwipeColor tints them to any colour without mixing in a colour of its own; real
+// White so SetSwipeColor tints them to any color without mixing in a color of its own; real
 // alpha because the game's own ring art is additive glow on black, which a sweep cannot blend.
 //
 // Each file is named after its band as a percent of the ring's outer radius: Ring015 has a band
@@ -40,7 +40,7 @@ function ringAlpha(bandPercent) {
   return alpha;
 }
 
-// TGA: uncompressed true colour, 32 bits, 8 alpha bits, rows from the top (descriptor 0x28).
+// TGA: uncompressed true color, 32 bits, 8 alpha bits, rows from the top (descriptor 0x28).
 function tga(alpha) {
   const header = Buffer.alloc(18);
   header[2] = 2;

@@ -92,9 +92,19 @@ local function CreatePanel(name)
 	end
 	f.cbTitle = title
 
+	-- Kept on the frame so the window styles can find it.
+	f.cbClose = f.CloseButton
 	if not f.CloseButton then
 		local ok, b = pcall(CreateFrame, "Button", nil, f, "UIPanelCloseButton")
-		if ok and b then b:SetPoint("TOPRIGHT", 1, 1) end
+		if ok and b then
+			b:SetPoint("TOPRIGHT", 1, 1)
+			f.cbClose = b
+		end
+	end
+	-- The template's own click goes through HideUIPanel, which this client refuses in combat
+	-- ("Interface action blocked"), so the X hides the window itself.
+	if f.cbClose and f.cbClose.SetScript then
+		f.cbClose:SetScript("OnClick", function() f:Hide() end)
 	end
 
 	f:SetMovable(true)
@@ -213,6 +223,8 @@ local function Slider(layout, label, minV, maxV, step, get, set, format, tooltip
 		used = "bare"
 	end
 	report["slider template"] = used
+	-- Kept for a slider that grays itself out (the Dark opacity on the Look tab).
+	slider.cbCaption, slider.cbValueText = caption, value
 
 	-- OptionsSliderTemplate brings its own captions, we draw our own.
 	for _, suffix in ipairs({ "Low", "High", "Text" }) do
@@ -315,10 +327,10 @@ local function Color(layout, label, get, set, tooltip, indent, width)
 			swatch:SetColorTexture(r, g, b)
 			ns.Refresh()
 		end)
-		report["colour picker"] = ok and "ok" or "unavailable"
-		if not ok then ns.Print("this client would not open the colour picker.") end
+		report["color picker"] = ok and "ok" or "unavailable"
+		if not ok then ns.Print("this client would not open the color picker.") end
 	end)
-	Tooltip(button, label, tooltip or "Click to pick a colour.")
+	Tooltip(button, label, tooltip or "Click to pick a color.")
 
 	Place(layout, button, 26, indent)
 	widgets[#widgets + 1] = { refresh = function()
@@ -395,7 +407,7 @@ end
 -- ------------------------------------------------------------------
 
 -- Two controls on one row, each given its own indent and width. The row is as tall as the taller
--- of the two, so a slider beside a colour swatch still leaves the next row in the right place.
+-- of the two, so a slider beside a color swatch still leaves the next row in the right place.
 local function SideBySide(layout, left, right)
 	local half = (PANE_W - 24) / 2
 	local top = layout.y
@@ -493,7 +505,7 @@ local function BuildPointerPage(parent)
 		function() return math.floor(ns.db.pointer.alpha * 100 + 0.5) end,
 		function(v) ns.db.pointer.alpha = v / 100 end,
 		function(v) return v .. "%" end, nil, 24)
-	Color(layout, "Pointer colour", function() return ns.db.pointer.color end,
+	Color(layout, "Pointer color", function() return ns.db.pointer.color end,
 		function(r, g, b) ns.db.pointer.color = { r, g, b } end,
 		"Tints the pointer. White leaves the art as the game drew it.", 24)
 	Check(layout, "Dark outline behind it", "A shadow copy that keeps the pointer readable over bright ground.",
@@ -553,7 +565,7 @@ local function BuildRingPage(parent)
 		function() return math.floor(ns.db.ring.alpha * 100 + 0.5) end,
 		function(v) ns.db.ring.alpha = v / 100 end,
 		function(v) return v .. "%" end, nil, 24)
-	Color(layout, "Ring colour", function() return ns.db.ring.color end,
+	Color(layout, "Ring color", function() return ns.db.ring.color end,
 		function(r, g, b) ns.db.ring.color = { r, g, b } end, nil, 24)
 	Slider(layout, "Spin", -6, 6, 1,
 		function() return ns.db.ring.spin end, function(v) ns.db.ring.spin = v end,
@@ -566,7 +578,7 @@ local function BuildRingPage(parent)
 		function(v) ns.db.ring.hoverScale = v / 100 end,
 		function(v) return v .. "%" end, nil, 24)
 
-	Header(layout, "Centre dot")
+	Header(layout, "Center dot")
 	Check(layout, "Show a dot at the exact cursor point", nil,
 		function() return ns.db.dot.enabled end, function(v) ns.db.dot.enabled = v end)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.DOT_TEXTURES, "dot")),
@@ -574,7 +586,7 @@ local function BuildRingPage(parent)
 	Slider(layout, "Size", 2, 120, 1,
 		function() return ns.db.dot.size end, function(v) ns.db.dot.size = v end,
 		function(v) return v .. "px" end, nil, 24)
-	Color(layout, "Dot colour", function() return ns.db.dot.color end,
+	Color(layout, "Dot color", function() return ns.db.dot.color end,
 		function(r, g, b) ns.db.dot.color = { r, g, b } end, nil, 24)
 end
 
@@ -601,7 +613,7 @@ local function BuildTrailPage(parent)
 		function(v) return v .. "%" end, nil, 24)
 	Check(layout, "Fade along the trail", "Each segment is fainter than the one before it.",
 		function() return ns.db.trail.fade end, function(v) ns.db.trail.fade = v end, 24)
-	Color(layout, "Trail colour", function() return ns.db.trail.color end,
+	Color(layout, "Trail color", function() return ns.db.trail.color end,
 		function(r, g, b) ns.db.trail.color = { r, g, b } end, nil, 24)
 	Choice(layout, "Shape", TextureOptions(ns.UsableTextures(ns.DOT_TEXTURES, "dot")),
 		function() return ns.db.trail.texture end, function(v) ns.db.trail.texture = v end, nil, 24)
@@ -726,7 +738,7 @@ local function BuildInfoPage(parent)
 		ns.SyncOptions()
 		ns.Print("activity ring set back to its default look.")
 	end)
-	Tooltip(defaultLook, "Default look", "Puts the ring's size, thickness, colour and opacity back to their defaults. Whether it shows, and for what, is left as it is.")
+	Tooltip(defaultLook, "Default look", "Puts the ring's size, thickness, color and opacity back to their defaults. Whether it shows, and for what, is left as it is.")
 
 	Choice(layout, "Show", {
 		{ value = "off", label = "Off" },
@@ -758,9 +770,62 @@ local function BuildInfoPage(parent)
 		function(indent, width)
 			-- Down a little, level with the slider bar beside it rather than its caption.
 			layout.y = layout.y + 12
-			Color(layout, "Colour", function() return ns.db.activity.color end,
+			Color(layout, "Color", function() return ns.db.activity.color end,
 				function(r, g, b) ns.db.activity.color = { r, g, b } end, nil, indent, width)
 		end)
+end
+
+-- The window styles live in Styles.lua, which loads after this file, so ns.Styles is only read
+-- here once the page is built at ADDON_LOADED.
+local function BuildLookPage(parent)
+	local layout = NewLayout(parent)
+	local Styles = ns.Styles
+
+	Header(layout, "Window style")
+	if not Styles then
+		Note(layout, "The window styles did not load on this client. /cursor debug says why.", nil, 2)
+		return
+	end
+	Note(layout, "Restyles the addon's own window, the one /cursor window opens: its backdrop, title bar and close button. The controls inside keep the game's look, because they are the same ones this page shows in the game's options window. The minimap button and everything drawn at the cursor stay as they are.", nil, 4)
+
+	local styles = {}
+	for _, key in ipairs({ "auto", "blizzard", "dark" }) do
+		styles[#styles + 1] = { value = key, label = Styles.Name(key) }
+	end
+	Choice(layout, "Window style", styles,
+		function()
+			local style = ns.db.style
+			return (style == "blizzard" or style == "dark") and style or "auto"
+		end,
+		function(v) Styles.Set(v) end,
+		table.concat(Styles.HELP, "\n"))
+
+	-- What is drawn now, and what a reload would change.
+	local status = Note(layout, " ", 2, 2)
+	widgets[#widgets + 1] = { refresh = function() status:SetText(Styles.Note()) end }
+
+	local opacity = Slider(layout, "Dark background opacity", 0, 100, 5,
+		function() return math.floor((ns.db.darkAlpha or 0.92) * 100 + 0.5) end,
+		function(v)
+			ns.db.darkAlpha = v / 100
+			Styles.SetDarkAlpha(ns.db.darkAlpha)
+		end,
+		function(v) return v .. "%" end)
+	opacity:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText("Dark background opacity", 1, 1, 1)
+		GameTooltip:AddLine("How much of the world shows through the Dark style's window.", nil, nil, nil, true)
+		if ns.db.style ~= "dark" then GameTooltip:AddLine("Applies to the Dark style only.", 1, 0.82, 0, true) end
+		GameTooltip:Show()
+	end)
+	-- Grayed out for every style but Dark, which is the only one it changes.
+	widgets[#widgets + 1] = { refresh = function()
+		local dark = ns.db.style == "dark"
+		if opacity.SetEnabled then opacity:SetEnabled(dark) end
+		opacity:SetAlpha(dark and 1 or 0.5)
+		opacity.cbCaption:SetFontObject(dark and GameFontHighlight or GameFontDisable)
+		opacity.cbValueText:SetFontObject(dark and GameFontNormalSmall or GameFontDisable)
+	end }
 end
 
 local function BuildAboutPage(parent)
@@ -773,6 +838,7 @@ local function BuildAboutPage(parent)
 	Note(layout, "/cursor on and /cursor off toggle every effect.", 12)
 	Note(layout, "/cursor size auto, 1, 2 or 3 sets the Blizzard cursor size.", 12)
 	Note(layout, "/cursor minimap shows or hides the minimap button.", 12)
+	Note(layout, "/cursor style auto, blizzard or dark sets the look of the addon's own window.", 12)
 	Note(layout, "/cursor reset restores the defaults.", 12)
 	Note(layout, "/cursor debug prints what this client supports, which is worth pasting into a bug report.", 12, 2)
 
@@ -802,6 +868,7 @@ local PAGES = {
 	{ key = "trail", label = "Trail", build = BuildTrailPage },
 	{ key = "spell", label = "Spell effect", build = BuildSpellPage, lazy = true },
 	{ key = "info", label = "Information", build = BuildInfoPage },
+	{ key = "look", label = "Look", build = BuildLookPage },
 	{ key = "about", label = "About", build = BuildAboutPage },
 }
 
@@ -925,6 +992,8 @@ local function BuildWindow()
 	end)
 
 	tinsert(UISpecialFrames, "CursorBeaconWindow")
+	-- In the window style, if one is already drawn by the time the window is built.
+	if ns.SkinWindow then ns.SkinWindow(window) end
 end
 
 -- Opens the addon's page inside the game's own options window. Returns false when this client
@@ -1096,6 +1165,9 @@ local function PlaceMinimapButton()
 	if not minimapButton then return end
 	local angle = math.rad(ns.db.minimap.angle or 215)
 	local radius = ((Minimap:GetWidth() or 140) / 2) + 6
+	-- Only while it sits on the minimap. A button collector (EllesmereUI's, for one) that
+	-- has taken the button keeps it where it put it.
+	if minimapButton:GetParent() ~= Minimap then return end
 	minimapButton:ClearAllPoints()
 	minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
 end
